@@ -1,0 +1,90 @@
+{
+  "catalogo": "N8N Workflows - Repositório Local",
+  "versao": "1.0.0",
+  "atualizado": "2026-03-18",
+  "fontes_confiaveis": [
+    "https://github.com/n8n-io/n8n-workflows",
+    "https://github.com/n8n-io/n8n",
+    "https://n8n.io/workflows/"
+  ],
+  "categorias": {
+    "basicos": [
+      {
+        "id": "WF-001",
+        "nome": "Webhook Simples",
+        "arquivo": "basicos/webhook-simples.json",
+        "descricao": "Recebe dados via webhook e retorna resposta",
+        "tags": ["webhook", "http", "basico"]
+      },
+      {
+        "id": "WF-002",
+        "nome": "Agendamento Cron",
+        "arquivo": "basicos/cron-agendamento.json",
+        "descricao": "Executa tarefa em horário agendado",
+        "tags": ["cron", "schedule", "automatico"]
+      },
+      {
+        "id": "WF-003",
+        "nome": "HTTP Request GET",
+        "arquivo": "basicos/http-request-get.json",
+        "descricao": "Faz requisição GET para uma API externa",
+        "tags": ["http", "api", "get", "request"]
+      }
+    ],
+    "integracoes": [
+      {
+        "id": "WF-010",
+        "nome": "GitHub Webhook para Slack",
+        "arquivo": "integracoes/github-to-slack.json",
+        "descricao": "Notifica Slack quando há push no GitHub",
+        "tags": ["github", "slack", "webhook", "notificacao"]
+      },
+      {
+        "id": "WF-011",
+        "nome": "Formulário para Google Sheets",
+        "arquivo": "integracoes/form-to-google-sheets.json",
+        "descricao": "Salva dados de formulário no Google Sheets",
+        "tags": ["google-sheets", "formulario", "dados"]
+      },
+      {
+        "id": "WF-012",
+        "nome": "Email para Telegram",
+        "arquivo": "integracoes/email-to-telegram.json",
+        "descricao": "Encaminha emails importantes para Telegram",
+        "tags": ["email", "telegram", "notificacao"]
+      }
+    ],
+    "dados": [
+      {
+        "id": "WF-020",
+        "nome": "Transformação de Dados JSON",
+        "arquivo": "dados/transformacao-json.json",
+        "descricao": "Transforma e filtra dados JSON de uma API",
+        "tags": ["json", "transformacao", "dados", "filter"]
+      },
+      {
+        "id": "WF-021",
+        "nome": "CSV para JSON",
+        "arquivo": "dados/csv-para-json.json",
+        "descricao": "Converte arquivo CSV em JSON estruturado",
+        "tags": ["csv", "json", "conversao", "dados"]
+      }
+    ],
+    "notificacoes": [
+      {
+        "id": "WF-030",
+        "nome": "Alerta de Erro por Email",
+        "arquivo": "notificacoes/alerta-erro-email.json",
+        "descricao": "Monitora endpoint e envia email se houver erro",
+        "tags": ["email", "monitoramento", "alerta", "erro"]
+      },
+      {
+        "id": "WF-031",
+        "nome": "Relatório Diário Slack",
+        "arquivo": "notificacoes/relatorio-diario-slack.json",
+        "descricao": "Envia relatório diário automático no Slack",
+        "tags": ["slack", "relatorio", "cron", "diario"]
+      }
+    ]
+  }
+}

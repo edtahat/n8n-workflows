@@ -1,0 +1,64 @@
+{
+  "name": "Webhook Simples",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "meu-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "webhook-id-unico"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processa os dados recebidos\nconst dados = $input.all();\nconsole.log('Dados recebidos:', JSON.stringify(dados[0].json));\n\n// Retorna os dados processados\nreturn dados.map(item => ({\n  json: {\n    sucesso: true,\n    dados_recebidos: item.json,\n    timestamp: new Date().toISOString()\n  }\n}));"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Processar Dados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Processar Dados", "type": "main", "index": 0 }]
+      ]
+    },
+    "Processar Dados": {
+      "main": [
+        [{ "node": "Responder", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateId": "WF-001",
+    "descricao": "Recebe dados via webhook POST e retorna resposta JSON"
+  },
+  "tags": ["webhook", "basico"]
+}
