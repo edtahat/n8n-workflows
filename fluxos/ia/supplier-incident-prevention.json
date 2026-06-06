@@ -1,0 +1,558 @@
+{
+  "name": "WF-100 | Prevenção de Incidentes - Análise Semanal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtWeekday": 1,
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "wf100-0001",
+      "name": "Trigger Semanal",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "notes": "CONFIGURAR: Dispara toda segunda-feira às 08:00. triggerAtWeekday: 0=Dom 1=Seg 2=Ter 3=Qua 4=Qui 5=Sex 6=Sáb. Ajuste triggerAtHour conforme necessário."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/content",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "wf100-0002",
+      "name": "Baixar Incidentes Excel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 300],
+      "notes": "CONFIGURAR: Substitua SEU_SHAREPOINT_SITE_ID e SEU_INCIDENTES_FILE_ID pelos valores reais. Use a credencial OAuth2 Microsoft 365. O arquivo é incidentes_fornecedores.xlsx."
+    },
+    {
+      "parameters": {
+        "operation": "fromBinary",
+        "fileFormat": "xlsx",
+        "dataPropertyName": "data",
+        "options": {
+          "sheetName": "Incidentes",
+          "includeEmptyRows": false
+        }
+      },
+      "id": "wf100-0003",
+      "name": "Parsear Incidentes",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [750, 300],
+      "notes": "CONFIGURAR: sheetName deve ser exatamente o nome da aba no Excel que contém os incidentes. Certifique-se que a linha 1 contém os cabeçalhos: ID, Data, Fornecedor, Cod_Fornecedor, Part_Number, Descricao_Problema, Causa_Raiz, D1-D8."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/workbook/worksheets/Processados/usedRange",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "options": {}
+      },
+      "id": "wf100-0004",
+      "name": "Baixar Processados",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 300],
+      "notes": "Lê a aba 'Processados' do mesmo arquivo Excel via Graph API Excel. Retorna os IDs de incidentes já processados para evitar reprocessamento. Usa o mesmo arquivo de incidentes."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear resposta do Graph API Excel - estrutura: {values: [[row1_col1, row1_col2, ...], ...]}\nconst data = $input.first().json;\nif (!data.values || data.values.length <= 1) {\n  return [{json: {ID: '__NENHUM__'}}];\n}\nconst headers = data.values[0];\nconst rows = data.values.slice(1);\nconst items = rows.map(row => {\n  const obj = {};\n  headers.forEach((h, i) => { obj[String(h)] = row[i]; });\n  return {json: obj};\n});\nreturn items.length > 0 ? items : [{json: {ID: '__NENHUM__'}}];"
+      },
+      "id": "wf100-0005",
+      "name": "Parsear Processados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Converte a resposta JSON do Graph API Excel (formato values[][]) em itens do N8N. Retorna um item dummy se não houver processados."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtra incidentes que ainda NAO foram processados\nconst todosInc = $('Parsear Incidentes').all().map(i => i.json);\nconst processados = new Set(\n  $input.all().map(i => String(i.json.ID || '')).filter(id => id && id !== '__NENHUM__')\n);\nconst novos = todosInc.filter(i => i.ID && !processados.has(String(i.ID)));\n\nif (!novos.length) {\n  return [{json: {\n    tem_novos: false,\n    total_novos: 0,\n    timestamp_analise: new Date().toISOString(),\n    mensagem: 'Nenhum incidente novo esta semana. Total historico: ' + todosInc.length + ' incidentes.'\n  }}];\n}\n\nconsole.log('Encontrados ' + novos.length + ' incidentes novos para processar.');\nreturn novos.map(i => ({json: {...i, tem_novos: true, timestamp_analise: new Date().toISOString()}}));"
+      },
+      "id": "wf100-0006",
+      "name": "Filtrar Novos Incidentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300],
+      "notes": "Compara todos os incidentes da aba 'Incidentes' com os IDs já processados na aba 'Processados'. Retorna apenas os incidentes novos (ainda não analisados pelo sistema)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-tem-novos",
+              "leftValue": "={{ $json.tem_novos }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf100-0007",
+      "name": "Verificar Se Existem Novos",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1750, 300],
+      "notes": "Verifica se há incidentes novos. true = continua análise. false = termina sem ação."
+    },
+    {
+      "parameters": {},
+      "id": "wf100-0008",
+      "name": "Sem Novos - Fim",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2000, 500],
+      "notes": "Execução termina aqui quando não há incidentes novos. Verifique os logs para confirmar a execução."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/workbook/worksheets/Familias/usedRange",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "options": {}
+      },
+      "id": "wf100-0009",
+      "name": "Baixar Familias Excel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, 300],
+      "notes": "CONFIGURAR: Lê a aba 'Familias' do Excel com mapeamento Part_Number → Familia. Colunas esperadas: Part_Number, Familia."
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.values || data.values.length <= 1) return [{json: {Part_Number: '__NENHUM__', Familia: 'DESCONHECIDA'}}];\nconst headers = data.values[0];\nconst rows = data.values.slice(1);\nreturn rows.map(row => {\n  const obj = {};\n  headers.forEach((h, i) => { obj[String(h)] = row[i]; });\n  return {json: obj};\n});"
+      },
+      "id": "wf100-0010",
+      "name": "Parsear Familias",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300],
+      "notes": "Converte resposta do Graph API para itens N8N. Aba 'Familias' precisa ter colunas: Part_Number e Familia."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_PEDIDOS_FILE_ID/workbook/worksheets/Pedidos/usedRange",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "options": {}
+      },
+      "id": "wf100-0011",
+      "name": "Baixar Pedidos Excel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2500, 300],
+      "notes": "CONFIGURAR: SEU_PEDIDOS_FILE_ID é o ID do arquivo planejamento_pedidos.xlsx no SharePoint. Aba 'Pedidos' com colunas: Pedido_ID, Fornecedor, Cod_Fornecedor, Part_Number, Qtd, Data_Entrega_Prevista, Status."
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data.values || data.values.length <= 1) return [{json: {Pedido_ID: '__NENHUM__'}}];\nconst headers = data.values[0];\nconst rows = data.values.slice(1);\nreturn rows.map(row => {\n  const obj = {};\n  headers.forEach((h, i) => { obj[String(h)] = row[i]; });\n  return {json: obj};\n});"
+      },
+      "id": "wf100-0012",
+      "name": "Parsear Pedidos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2750, 300],
+      "notes": "Converte a aba 'Pedidos' do planejamento para itens N8N. Garanta que Data_Entrega_Prevista esteja no formato ISO (YYYY-MM-DD) no Excel."
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "wf100-0013",
+      "name": "Processar Por Incidente",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [3000, 300],
+      "notes": "Loop: processa UM incidente por vez. Output 0 = item do lote atual (continua loop). Output 1 = fim (todos processados). O último nó do loop conecta de volta aqui."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enriquece o incidente com familia, historico e monta prompts para a IA\nconst inc = $input.first().json;\nconst todosInc = $('Parsear Incidentes').all().map(i => i.json);\nconst familias = $('Parsear Familias').all().map(f => f.json);\nconst pedidos = $('Parsear Pedidos').all().map(p => p.json);\n\n// Mapear familias\nconst famMap = {};\nfamilias.forEach(f => {\n  if (f.Part_Number && f.Familia) famMap[String(f.Part_Number).trim()] = String(f.Familia).trim();\n});\nconst familia = famMap[String(inc.Part_Number || '').trim()] || 'FAMILIA_NAO_MAPEADA';\n\n// Historico do fornecedor e familia\nconst incForn = todosInc.filter(i => i.Cod_Fornecedor === inc.Cod_Fornecedor);\nconst incFam = todosInc.filter(i => famMap[String(i.Part_Number || '').trim()] === familia && familia !== 'FAMILIA_NAO_MAPEADA');\n\n// Pedidos dos proximos 90 dias para este part/familia\nconst agora = new Date();\nconst pedFiltrados = pedidos.filter(p => {\n  const diff = (new Date(p.Data_Entrega_Prevista) - agora) / 86400000;\n  return (p.Part_Number === inc.Part_Number || famMap[String(p.Part_Number||'').trim()] === familia) && diff > 0 && diff <= 90;\n});\n\n// Verificar se e ocorrencia nova (novo fornecedor, part novo, familia nova)\nconst isNovoFornecedor = incForn.length === 0;\nconst isNovaFamilia = incFam.length === 0 && familia !== 'FAMILIA_NAO_MAPEADA';\nconst isOcorrenciaNova = isNovoFornecedor || isNovaFamilia;\n\n// Prompt sistema para classificacao 14Q-Basics Bosch\nconst sysPrompt14Q = 'Voce eh especialista em qualidade automotiva com conhecimento profundo da metodologia Bosch 14Q-Basics (Value Stream Q-Basics). Os 14 principios sao: Q1=Plano de Controle, Q2=FMEA, Q3=Poka-Yoke/Mistake Proofing, Q4=SPC/CEP, Q5=MSA/Analise Sistema Medicao, Q6=PPAP/APQP, Q7=Reacao ao Cliente/Customer Complaint, Q8=Qualidade na Fonte, Q9=Manutencao Preventiva, Q10=Treinamento de Operadores, Q11=Gestao de Mudancas, Q12=Auditorias de Processo, Q13=Gestao de Fornecedores/Sub-fornecedores, Q14=Logistica e Embalagem. Analise o incidente e classifique na categoria 14Q mais adequada. Responda SOMENTE em JSON valido sem markdown: {\"categoria_14q\":\"Q[N] - [Nome]\",\"numero_q\":[N],\"confianca\":[0.0-1.0],\"justificativa\":\"[explicacao detalhada]\",\"categorias_secundarias\":[\"Q[N] - [Nome]\"],\"acoes_preventivas\":[\"acao1\",\"acao2\",\"acao3\"]}';\n\nconst userPrompt14Q = 'Analise e classifique este incidente 8D nos 14Q-Basics Bosch:\\n\\nFornecedor: ' + inc.Fornecedor + ' (Cod: ' + inc.Cod_Fornecedor + ')\\nPart Number: ' + inc.Part_Number + ' (Familia: ' + familia + ')\\nData da Ocorrencia: ' + inc.Data + '\\nD3 - Contencao: ' + (inc.D3 || 'N/A') + '\\nD4 - Causa Raiz: ' + (inc.Causa_Raiz || inc.D4 || 'N/A') + '\\nD5 - Acoes Permanentes: ' + (inc.D5 || 'N/A') + '\\nD6 - Implementacao: ' + (inc.D6 || 'N/A') + '\\nDescricao do Problema: ' + inc.Descricao_Problema + '\\n\\nContexto historico:\\n- Total de ocorrencias neste fornecedor: ' + incForn.length + '\\n- Total de ocorrencias nesta familia (' + familia + '): ' + incFam.length + '\\n- E ocorrencia nova/inedita: ' + isOcorrenciaNova + '\\n\\nClassifique o 14Q que melhor explica a CAUSA RAIZ do problema.';\n\nreturn [{\n  json: {\n    ...inc,\n    familia,\n    total_falhas_fornecedor: incForn.length,\n    total_falhas_familia: incFam.length,\n    pedidos_proximos_90d: pedFiltrados,\n    is_ocorrencia_nova: isOcorrenciaNova,\n    is_novo_fornecedor: isNovoFornecedor,\n    is_nova_familia: isNovaFamilia,\n    historico_tipos_14q: [...new Set(incForn.map(i => i.categoria_14q).filter(Boolean))],\n    system_prompt_14q: sysPrompt14Q,\n    user_prompt_14q: userPrompt14Q\n  }\n}];"
+      },
+      "id": "wf100-0014",
+      "name": "Enriquecer Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3250, 300],
+      "notes": "Enriquece o incidente com: família do part number, histórico do fornecedor, pedidos futuros e prompts para a IA. Detecta novas ocorrências (novo fornecedor/família) para aprendizado."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepara o corpo da requisicao para OpenAI - preserva TODOS os dados do incidente\nconst inc = $input.first().json;\nreturn [{\n  json: {\n    ...inc,\n    _openai_body_14q: {\n      model: 'gpt-4',\n      response_format: {type: 'json_object'},\n      messages: [\n        {role: 'system', content: inc.system_prompt_14q},\n        {role: 'user', content: inc.user_prompt_14q}\n      ],\n      temperature: 0.1,\n      max_tokens: 2000\n    }\n  }\n}];"
+      },
+      "id": "wf100-0015",
+      "name": "Preparar Request 14Q",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3500, 300],
+      "notes": "Monta o corpo JSON da chamada OpenAI e PRESERVA todos os dados do incidente no mesmo item (campo _openai_body_14q). Isto é necessário para recuperar os dados após a chamada HTTP."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "credentials": {
+          "httpBearerAuth": {
+            "id": "CONFIGURAR_ID_OPENAI",
+            "name": "OpenAI API Key"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json._openai_body_14q }}",
+        "options": {}
+      },
+      "id": "wf100-0016",
+      "name": "Classificar 14Q via GPT-4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [3750, 300],
+      "notes": "CONFIGURAR: Crie uma credencial 'HTTP Bearer Auth' com seu token OpenAI (sk-...). Chama o GPT-4 para classificar o incidente nos 14Q-Basics Bosch. Custo estimado: ~$0.05-0.10 por incidente."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai a classificacao 14Q da resposta OpenAI e prepara o prompt para o checklist LPC\nconst resp = $input.first().json;\nconst inc = $('Preparar Request 14Q').first().json;\n\nlet c = {categoria_14q: 'Q7 - Reacao ao Cliente', numero_q: 7, confianca: 0.5, justificativa: 'Erro ao parsear resposta da IA', categorias_secundarias: [], acoes_preventivas: []};\ntry {\n  const content = resp.choices && resp.choices[0] && resp.choices[0].message ? resp.choices[0].message.content : '{}';\n  c = JSON.parse(content);\n} catch(e) {\n  console.error('Erro ao parsear resposta 14Q:', e.message);\n}\n\n// Prompt para gerar o checklist LPC\nconst sysLPC = 'Voce eh especialista em Layer Process Confirmation (LPC / Auditoria por Camadas) no setor automotivo. Com base no incidente e classificacao 14Q, crie um checklist detalhado e especifico para o fornecedor executar durante a producao. O checklist deve prevenir a reocorrencia da falha identificada. Responda SOMENTE em JSON valido sem markdown: {\"checklist_titulo\":\"[titulo especifico]\",\"objetivo\":\"[objetivo do checklist]\",\"itens\":[{\"numero\":1,\"categoria\":\"[categoria]\",\"ponto_verificacao\":\"[o que verificar especificamente]\",\"criterio_aceite\":\"[criterio quantificavel de OK]\",\"frequencia\":\"[Por peca/Por lote/Por turno/etc]\",\"responsavel\":\"[Operador/Supervisor/Qualidade]\",\"referencia_documento\":\"[doc de referencia se aplicavel]\"}],\"observacoes_gerais\":\"[obs importantes]\"}';\n\nconst usrLPC = 'Crie um checklist Layer Process Confirmation (LPC) especifico para prevenir a reocorrencia desta falha:\\n\\nFornecedor: ' + inc.Fornecedor + '\\nPart Number: ' + inc.Part_Number + ' (Familia: ' + inc.familia + ')\\nProblema ocorrido: ' + inc.Descricao_Problema + '\\nCausa Raiz (8D): ' + (inc.Causa_Raiz || inc.D4 || 'N/A') + '\\nClassificacao 14Q: ' + c.categoria_14q + ' (Confianca: ' + Math.round((c.confianca||0)*100) + '%)\\nJustificativa: ' + (c.justificativa || '') + '\\nAcoes Preventivas 14Q: ' + (c.acoes_preventivas || []).join(', ') + '\\n\\nGere um checklist com MINIMO de 8 pontos de verificacao ESPECIFICOS E DETALHADOS para este tipo de falha. Cada ponto deve ter criterio de aceite quantificavel.';\n\nreturn [{\n  json: {\n    ...inc,\n    categoria_14q: c.categoria_14q || 'Q7 - Reacao ao Cliente',\n    numero_q: c.numero_q || 7,\n    confianca_14q: c.confianca || 0.5,\n    confianca_14q_pct: Math.round((c.confianca || 0.5) * 100),\n    justificativa_14q: c.justificativa || '',\n    categorias_secundarias: c.categorias_secundarias || [],\n    acoes_preventivas_14q: c.acoes_preventivas || [],\n    system_prompt_lpc: sysLPC,\n    user_prompt_lpc: usrLPC,\n    _openai_body_lpc: {\n      model: 'gpt-4',\n      response_format: {type: 'json_object'},\n      messages: [\n        {role: 'system', content: sysLPC},\n        {role: 'user', content: usrLPC}\n      ],\n      temperature: 0.2,\n      max_tokens: 3000\n    }\n  }\n}];"
+      },
+      "id": "wf100-0017",
+      "name": "Extrair 14Q e Preparar LPC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4000, 300],
+      "notes": "Parseia a resposta do GPT-4 (classificação 14Q), prepara o prompt para geração do checklist LPC e monta o corpo da próxima chamada OpenAI."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "credentials": {
+          "httpBearerAuth": {
+            "id": "CONFIGURAR_ID_OPENAI",
+            "name": "OpenAI API Key"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json._openai_body_lpc }}",
+        "options": {}
+      },
+      "id": "wf100-0018",
+      "name": "Gerar Checklist LPC via GPT-4",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [4250, 300],
+      "notes": "Chama o GPT-4 para gerar o checklist LPC específico ao produto e ao 14Q identificado. Custo estimado: ~$0.10-0.20 por incidente (prompt maior)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai checklist LPC + calcula todos os 3 metodos estatisticos + cruzamento com pedidos\nconst lpcResp = $input.first().json;\nconst inc = $('Extrair 14Q e Preparar LPC').first().json;\nconst todosInc = $('Parsear Incidentes').all().map(i => i.json);\n\n// === EXTRAIR CHECKLIST LPC ===\nlet cl = {checklist_titulo: 'LPC - ' + inc.Part_Number, objetivo: 'Prevenir reocorrencia de falha', itens: [{numero:1,categoria:'Processo',ponto_verificacao:'Verificar parametros criticos do processo',criterio_aceite:'Dentro dos limites especificados',frequencia:'Por lote',responsavel:'Operador',referencia_documento:'N/A'}], observacoes_gerais: 'Checklist padrao - customizar para o produto especifico'};\ntry {\n  const content = lpcResp.choices && lpcResp.choices[0] ? lpcResp.choices[0].message.content : '{}';\n  cl = JSON.parse(content);\n} catch(e) { console.error('Erro ao parsear checklist LPC:', e.message); }\n\n// === METODO 1: PPM (Parts Per Million) ===\nconst incForn = todosInc.filter(i => i.Cod_Fornecedor === inc.Cod_Fornecedor);\nconst totalFalhas = Math.max(incForn.length, 1);\n// IMPORTANTE: totalEntregas deve ser obtido do sistema ERP. Aqui usamos estimativa.\n// Para resultado preciso, adicione uma coluna 'Total_Pecas_Entregues' na aba do fornecedor\nconst totalEntregas = Math.max(totalFalhas * 5000, 10000);\nconst ppm = (totalFalhas / totalEntregas) * 1000000;\nconst ppmNorm = Math.min(ppm / 1000, 1.0); // 1000 PPM = risco maximo (1.0)\nconst histMin = totalFalhas < 3; // Alerta se historico insuficiente\n\n// === METODO 2: TENDENCIA TEMPORAL (Media Movel 6 Meses) ===\nconst agora = new Date();\nconst m3ago = new Date(agora.getTime() - 90 * 86400000);\nconst m6ago = new Date(agora.getTime() - 180 * 86400000);\nconst nPrim = incForn.filter(i => { const d = new Date(i.Data); return d >= m6ago && d < m3ago; }).length;\nconst nRec = incForn.filter(i => new Date(i.Data) >= m3ago).length;\nconst delta = nRec - nPrim;\nconst tendTexto = delta > 0 ? 'CRESCENTE (+' + delta + ' vs periodo anterior)' : delta < 0 ? 'DECRESCENTE (' + delta + ' vs periodo anterior)' : 'ESTAVEL';\nconst tendNorm = Math.max(0, Math.min(1, 0.5 + delta * 0.1));\n\n// === METODO 3: PROBABILIDADE BAYESIANA (com suavizacao de Laplace) ===\nconst falhasTipo = incForn.filter(i => i.categoria_14q === inc.categoria_14q).length;\n// P(falha|historico) = (falhas_tipo + 1) / (total_falhas + 2)  -- suavizacao de Laplace\nconst probBayes = (falhasTipo + 1) / (totalFalhas + 2);\n\n// === PROBABILIDADE FINAL (media ponderada) ===\n// PPM: 30% | Tendencia: 40% | Bayesiana: 30%\nconst probFinal = (ppmNorm * 0.30) + (tendNorm * 0.40) + (probBayes * 0.30);\nconst probPct = Math.round(probFinal * 100);\n\n// === CRUZAMENTO COM PEDIDOS FUTUROS ===\nconst pedidos = inc.pedidos_proximos_90d || [];\nconst threshold = 0.30; // 30% = limiar de alerta - AJUSTE conforme necessidade\nconst porMes = {1:{pedidos:[],qtd:0,risco:0},2:{pedidos:[],qtd:0,risco:0},3:{pedidos:[],qtd:0,risco:0}};\npedidos.forEach(p => {\n  const diff = (new Date(p.Data_Entrega_Prevista) - agora) / 86400000;\n  const mes = diff <= 30 ? 1 : diff <= 60 ? 2 : 3;\n  // Fator de decaimento: incerteza aumenta com a distancia temporal\n  const fator = mes === 1 ? 1.0 : mes === 2 ? 0.85 : 0.70;\n  const risco = probFinal * fator;\n  porMes[mes].pedidos.push({id:p.Pedido_ID,data:p.Data_Entrega_Prevista,qtd:p.Qtd,risco_pct:Math.round(risco*100)});\n  porMes[mes].qtd += Number(p.Qtd) || 0;\n  porMes[mes].risco = Math.max(porMes[mes].risco, risco);\n});\nconst riscoMax = Math.max(porMes[1].risco, porMes[2].risco, porMes[3].risco);\nconst alertar = riscoMax > threshold;\n\n// === TEXTO EXPLICATIVO DOS CALCULOS (para revisao humana) ===\nconst expl = [\n  '=== ANALISE ESTATISTICA DETALHADA ===',\n  'Data: ' + agora.toISOString(),\n  'Fornecedor: ' + inc.Fornecedor + ' | Part: ' + inc.Part_Number + ' | Familia: ' + inc.familia,\n  '',\n  'METODO 1 - PPM / Parts Per Million (Peso: 30%):',\n  '  Formula: PPM = (falhas / entregas) x 1.000.000',\n  '  Falhas historicas do fornecedor: ' + totalFalhas,\n  '  Total pecas entregues (estimado): ' + totalEntregas,\n  '  ATENCAO: Para calculo preciso do PPM, obtenha o numero real de pecas entregues do ERP!',\n  '  PPM calculado: ' + Math.round(ppm) + ' PPM',\n  '  Contribuicao normalizada: ' + Math.round(ppmNorm * 100) + '%',\n  histMin ? '  *** AVISO: Historico insuficiente (<3 ocorrencias). Resultado menos confiavel. ***' : '  Historico adequado (' + totalFalhas + ' ocorrencias).',\n  '',\n  'METODO 2 - TENDENCIA TEMPORAL - Media Movel 6 Meses (Peso: 40%):',\n  '  Periodo de analise: ultimos 6 meses divididos em 2 semestres',\n  '  Ocorrencias meses 4-6 (mais antigo): ' + nPrim,\n  '  Ocorrencias meses 1-3 (mais recente): ' + nRec,\n  '  Variacao: ' + (delta > 0 ? '+' : '') + delta + ' incidentes',\n  '  Tendencia: ' + tendTexto,\n  '  Contribuicao normalizada: ' + Math.round(tendNorm * 100) + '%',\n  '  (50% = estavel; >50% = piorando; <50% = melhorando)',\n  '',\n  'METODO 3 - PROBABILIDADE BAYESIANA com Suavizacao de Laplace (Peso: 30%):',\n  '  Formula: P(falha_tipo) = (n_falhas_tipo + 1) / (total_falhas_fornecedor + 2)',\n  '  Tipo analisado: ' + inc.categoria_14q,\n  '  Falhas deste tipo: ' + falhasTipo,\n  '  Calculo: (' + falhasTipo + ' + 1) / (' + totalFalhas + ' + 2) = ' + Math.round(probBayes * 100) + '%',\n  '  A suavizacao (+1/+2) evita probabilidade zero em casos sem historico especifico',\n  '',\n  'PROBABILIDADE FINAL (media ponderada):',\n  '  Formula: P_final = PPM_norm(0.30) + Tendencia(0.40) + Bayesiana(0.30)',\n  '  Calculo: (' + Math.round(ppmNorm*100) + '% x 0.30) + (' + Math.round(tendNorm*100) + '% x 0.40) + (' + Math.round(probBayes*100) + '% x 0.30)',\n  '  = ' + Math.round(ppmNorm*30) + '% + ' + Math.round(tendNorm*40) + '% + ' + Math.round(probBayes*30) + '%',\n  '  PROBABILIDADE FINAL: ' + probPct + '%',\n  '  LIMIAR DE ALERTA: ' + Math.round(threshold*100) + '%',\n  '  STATUS: ' + (alertar ? '*** ALERTA - RISCO ACIMA DO LIMIAR ***' : 'DENTRO DO LIMITE - MONITORAMENTO'),\n  '',\n  'CRUZAMENTO COM PEDIDOS FUTUROS (proximos 90 dias):',\n  '  Part Number: ' + inc.Part_Number + ' | Familia: ' + inc.familia,\n  '  Mes 1 (0-30 dias): ' + porMes[1].pedidos.length + ' pedido(s) | ' + porMes[1].qtd + ' pecas | Risco: ' + Math.round(porMes[1].risco*100) + '% (fator 1.0)',\n  '  Mes 2 (31-60 dias): ' + porMes[2].pedidos.length + ' pedido(s) | ' + porMes[2].qtd + ' pecas | Risco: ' + Math.round(porMes[2].risco*100) + '% (fator 0.85)',\n  '  Mes 3 (61-90 dias): ' + porMes[3].pedidos.length + ' pedido(s) | ' + porMes[3].qtd + ' pecas | Risco: ' + Math.round(porMes[3].risco*100) + '% (fator 0.70)',\n  '  Risco Maximo nos 90 dias: ' + Math.round(riscoMax*100) + '%'\n].join('\\n');\n\n// Formatar checklist como texto legivel\nconst checklistTexto = (cl.itens || []).map((it, idx) =>\n  (idx+1) + '. [' + (it.categoria||'Geral') + '] ' + it.ponto_verificacao + '\\n   Criterio: ' + it.criterio_aceite + '\\n   Freq: ' + it.frequencia + ' | Resp: ' + it.responsavel\n).join('\\n\\n');\n\n// Payload para salvar na aba Analises do SharePoint (linha a ser inserida na tabela)\nconst payloadAnalise = {\n  values: [[\n    String(inc.ID || ''),\n    agora.toISOString(),\n    String(inc.Fornecedor || ''),\n    String(inc.Cod_Fornecedor || ''),\n    String(inc.Part_Number || ''),\n    String(inc.familia || ''),\n    String(inc.categoria_14q || ''),\n    String(inc.confianca_14q_pct || 0) + '%',\n    String(Math.round(ppm)),\n    String(tendTexto),\n    String(Math.round(probBayes*100)) + '%',\n    String(probPct) + '%',\n    String(alertar ? 'ALERTA_ENVIADO' : 'MONITORAMENTO'),\n    String(cl.checklist_titulo || ''),\n    String(expl),\n    String(inc.is_ocorrencia_nova ? 'SIM - NOVA OCORRENCIA' : 'NAO')\n  ]]\n};\n\nreturn [{\n  json: {\n    ...inc,\n    checklist_titulo: cl.checklist_titulo || 'LPC - ' + inc.Part_Number,\n    checklist_objetivo: cl.objetivo || '',\n    checklist_itens: cl.itens || [],\n    checklist_observacoes: cl.observacoes_gerais || '',\n    checklist_texto_formatado: checklistTexto,\n    ppm: Math.round(ppm),\n    ppm_normalizado: ppmNorm,\n    tendencia: tendTexto,\n    tendencia_normalizada: tendNorm,\n    prob_bayesiana: probBayes,\n    prob_bayesiana_pct: Math.round(probBayes * 100),\n    prob_final: probFinal,\n    prob_final_pct: probPct,\n    historico_insuficiente: histMin,\n    pedidos_por_mes: porMes,\n    risco_maximo_pct: Math.round(riscoMax * 100),\n    threshold_pct: Math.round(threshold * 100),\n    alertar,\n    explicacao_calculo: expl,\n    payload_analise: payloadAnalise\n  }\n}];"
+      },
+      "id": "wf100-0019",
+      "name": "Extrair LPC e Calcular Tudo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4500, 300],
+      "notes": "NÚCLEO DO SISTEMA: Extrai checklist LPC + executa os 3 métodos estatísticos (PPM, Tendência, Bayesiana) + cruza com pedidos futuros. ATENÇÃO: O PPM usa estimativa de entregas. Para precisão, conecte ao ERP para obter o número real de peças entregues por fornecedor."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-alertar",
+              "leftValue": "={{ $json.alertar }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf100-0020",
+      "name": "Verificar Limiar de Risco",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4750, 300],
+      "notes": "Verifica se a probabilidade de falha ultrapassa o limiar definido (padrão: 30%). Para mudar o limiar, edite o nó 'Extrair LPC e Calcular Tudo' na variável 'threshold'."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "URL_DO_WEBHOOK_DO_WORKFLOW_HITL_AQUI",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json }}",
+        "options": {}
+      },
+      "id": "wf100-0021",
+      "name": "Acionar Alerta HITL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [5000, 150],
+      "notes": "CONFIGURAR: Substitua URL_DO_WEBHOOK_DO_WORKFLOW_HITL_AQUI pela URL do webhook do Workflow 2 (WF-101). A URL aparece no nó 'Receber Dados do WF1' do Workflow 2 após ativá-lo."
+    },
+    {
+      "parameters": {},
+      "id": "wf100-0022",
+      "name": "Registrar Monitoramento",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [5000, 500],
+      "notes": "Caso sem risco acima do limiar: registra como 'MONITORAMENTO' no payload_analise (já definido no nó anterior) e segue para salvar no SharePoint."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/workbook/worksheets/An%C3%A1lises/tables/TabelaAnalises/rows/add",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json.payload_analise }}",
+        "options": {}
+      },
+      "id": "wf100-0023",
+      "name": "Salvar Analise SharePoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [5250, 300],
+      "notes": "CONFIGURAR: Salva a análise na aba 'Análises' do Excel. A aba deve ter uma tabela chamada 'TabelaAnalises'. Colunas: ID_Incidente, Data_Analise, Fornecedor, Cod_Fornecedor, Part_Number, Familia, 14Q_Categoria, Confianca_IA, PPM, Tendencia, Prob_Bayes, Prob_Final, Status_Alerta, Checklist_Titulo, Explicacao_Calculo, Nova_Ocorrencia."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/workbook/worksheets/Processados/tables/TabelaProcessados/rows/add",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ {values: [[String($json.ID || ''), new Date().toISOString(), String($json.Part_Number || ''), String($json.categoria_14q || ''), String($json.prob_final_pct || 0) + '%']] } }}",
+        "options": {}
+      },
+      "id": "wf100-0024",
+      "name": "Marcar Como Processado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [5500, 300],
+      "notes": "CONFIGURAR: Registra o ID do incidente na aba 'Processados' para evitar reprocessamento na próxima semana. A aba precisa ter tabela 'TabelaProcessados' com colunas: ID, Data_Processamento, Part_Number, 14Q_Categoria, Prob_Final."
+    },
+    {
+      "parameters": {},
+      "id": "wf100-0025",
+      "name": "Analise Semanal Completa",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3000, 500],
+      "notes": "Fim do loop: todos os incidentes foram processados. Este nó é atingido quando o Split In Batches termina todos os lotes. Verificar os logs para o resumo da execução."
+    }
+  ],
+  "connections": {
+    "Trigger Semanal": {
+      "main": [
+        [{ "node": "Baixar Incidentes Excel", "type": "main", "index": 0 }]
+      ]
+    },
+    "Baixar Incidentes Excel": {
+      "main": [
+        [{ "node": "Parsear Incidentes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Incidentes": {
+      "main": [
+        [{ "node": "Baixar Processados", "type": "main", "index": 0 }]
+      ]
+    },
+    "Baixar Processados": {
+      "main": [
+        [{ "node": "Parsear Processados", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Processados": {
+      "main": [
+        [{ "node": "Filtrar Novos Incidentes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filtrar Novos Incidentes": {
+      "main": [
+        [{ "node": "Verificar Se Existem Novos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificar Se Existem Novos": {
+      "main": [
+        [{ "node": "Baixar Familias Excel", "type": "main", "index": 0 }],
+        [{ "node": "Sem Novos - Fim", "type": "main", "index": 0 }]
+      ]
+    },
+    "Baixar Familias Excel": {
+      "main": [
+        [{ "node": "Parsear Familias", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Familias": {
+      "main": [
+        [{ "node": "Baixar Pedidos Excel", "type": "main", "index": 0 }]
+      ]
+    },
+    "Baixar Pedidos Excel": {
+      "main": [
+        [{ "node": "Parsear Pedidos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parsear Pedidos": {
+      "main": [
+        [{ "node": "Processar Por Incidente", "type": "main", "index": 0 }]
+      ]
+    },
+    "Processar Por Incidente": {
+      "main": [
+        [{ "node": "Enriquecer Contexto", "type": "main", "index": 0 }],
+        [{ "node": "Analise Semanal Completa", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enriquecer Contexto": {
+      "main": [
+        [{ "node": "Preparar Request 14Q", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Request 14Q": {
+      "main": [
+        [{ "node": "Classificar 14Q via GPT-4", "type": "main", "index": 0 }]
+      ]
+    },
+    "Classificar 14Q via GPT-4": {
+      "main": [
+        [{ "node": "Extrair 14Q e Preparar LPC", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extrair 14Q e Preparar LPC": {
+      "main": [
+        [{ "node": "Gerar Checklist LPC via GPT-4", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gerar Checklist LPC via GPT-4": {
+      "main": [
+        [{ "node": "Extrair LPC e Calcular Tudo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extrair LPC e Calcular Tudo": {
+      "main": [
+        [{ "node": "Verificar Limiar de Risco", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificar Limiar de Risco": {
+      "main": [
+        [{ "node": "Acionar Alerta HITL", "type": "main", "index": 0 }],
+        [{ "node": "Registrar Monitoramento", "type": "main", "index": 0 }]
+      ]
+    },
+    "Acionar Alerta HITL": {
+      "main": [
+        [{ "node": "Salvar Analise SharePoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Registrar Monitoramento": {
+      "main": [
+        [{ "node": "Salvar Analise SharePoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salvar Analise SharePoint": {
+      "main": [
+        [{ "node": "Marcar Como Processado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Marcar Como Processado": {
+      "main": [
+        [{ "node": "Processar Por Incidente", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "templateId": "WF-100",
+    "descricao": "Análise semanal automática de incidentes de fornecedores. Classifica causas raiz nos 14Q-Basics Bosch via GPT-4, gera checklists LPC, calcula probabilidade estatística de falhas (3 métodos: PPM + Tendência + Bayesiana) e cruza com pedidos futuros de 3 meses."
+  },
+  "tags": ["qualidade", "fornecedores", "14q-bosch", "sharepoint", "openai", "prevencao", "analise-semanal"]
+}
