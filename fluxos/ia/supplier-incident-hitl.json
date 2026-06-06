@@ -1,0 +1,241 @@
+{
+  "name": "WF-101 | Prevenção de Incidentes - Alerta Humano (HITL)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supplier-hitl-alerta",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wf101-0001",
+      "name": "Receber Dados do WF1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "supplier-hitl-alerta-webhook",
+      "notes": "CONFIGURAR: Este webhook recebe os dados do Workflow 1 (WF-100) quando risco > limiar. Copie a URL deste webhook e cole no nó 'Acionar Alerta HITL' do WF-100. URL no N8N Cloud: https://SEU-TENANT.n8n.cloud/webhook/supplier-hitl-alerta"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepara os dados para o email de alerta ao responsavel interno\nconst inc = $input.first().json.body || $input.first().json;\n\n// Texto de risco colorido (HTML)\nconst corRisco = inc.prob_final_pct > 60 ? '#d32f2f' : inc.prob_final_pct > 40 ? '#f57c00' : '#388e3c';\nconst nivelRisco = inc.prob_final_pct > 60 ? 'CRITICO' : inc.prob_final_pct > 40 ? 'ALTO' : 'MEDIO';\n\n// Montar tabela de pedidos por mes\nconst pm = inc.pedidos_por_mes || {};\nconst tabelaPedidos = '<table style=\"width:100%;border-collapse:collapse;\">'\n  + '<tr style=\"background:#1976d2;color:white;\"><th style=\"padding:6px;\">Mês</th><th style=\"padding:6px;\">Pedidos</th><th style=\"padding:6px;\">Peças</th><th style=\"padding:6px;\">Risco</th></tr>'\n  + '<tr><td style=\"padding:6px;border:1px solid #ddd;\">Mês 1 (0-30 dias)</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[1]||{}).pedidos||[]).length + '</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[1]||{}).qtd||0) + '</td><td style=\"padding:6px;border:1px solid #ddd;font-weight:bold;\">' + Math.round(((pm[1]||{}).risco||0)*100) + '%</td></tr>'\n  + '<tr style=\"background:#f5f5f5;\"><td style=\"padding:6px;border:1px solid #ddd;\">Mês 2 (31-60 dias)</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[2]||{}).pedidos||[]).length + '</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[2]||{}).qtd||0) + '</td><td style=\"padding:6px;border:1px solid #ddd;font-weight:bold;\">' + Math.round(((pm[2]||{}).risco||0)*100) + '%</td></tr>'\n  + '<tr><td style=\"padding:6px;border:1px solid #ddd;\">Mês 3 (61-90 dias)</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[3]||{}).pedidos||[]).length + '</td><td style=\"padding:6px;border:1px solid #ddd;\">' + ((pm[3]||{}).qtd||0) + '</td><td style=\"padding:6px;border:1px solid #ddd;font-weight:bold;\">' + Math.round(((pm[3]||{}).risco||0)*100) + '%</td></tr>'\n  + '</table>';\n\n// Checklist formatado em HTML\nconst checklistItems = (inc.checklist_itens||[]).map((it, idx) =>\n  '<li style=\"margin-bottom:8px;\"><b>' + (idx+1) + '. ' + (it.ponto_verificacao||'') + '</b><br/>'\n  + '<small>Critério: ' + (it.criterio_aceite||'') + ' | Freq: ' + (it.frequencia||'') + ' | Resp: ' + (it.responsavel||'') + '</small></li>'\n).join('');\n\nconst email_assunto = '[RISCO ' + nivelRisco + ' ' + inc.prob_final_pct + '%] Fornecedor: ' + (inc.Fornecedor||'') + ' | Part: ' + (inc.Part_Number||'');\n\nreturn [{\n  json: {\n    ...inc,\n    email_assunto,\n    nivel_risco: nivelRisco,\n    cor_risco: corRisco,\n    tabela_pedidos_html: tabelaPedidos,\n    checklist_html: '<ol>' + checklistItems + '</ol>',\n    email_responsavel: 'SEU_EMAIL_RESPONSAVEL@empresa.com',\n    timestamp_alerta: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "wf101-0002",
+      "name": "Preparar Dados do Alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "notes": "CONFIGURAR: Altere 'SEU_EMAIL_RESPONSAVEL@empresa.com' para o e-mail do responsável interno que receberá os alertas. Pode ser um endereço de grupo de qualidade."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_responsavel }}",
+        "subject": "={{ $json.email_assunto }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:850px;margin:0 auto;\">\n<div style=\"background:{{ $json.cor_risco }};color:white;padding:15px;border-radius:5px;margin-bottom:20px;\">\n  <h2 style=\"margin:0;\">⚠️ ALERTA DE QUALIDADE - RISCO {{ $json.nivel_risco }}</h2>\n  <p style=\"margin:5px 0 0;\">Probabilidade de falha nas próximas entregas: <strong>{{ $json.prob_final_pct }}%</strong></p>\n</div>\n\n<table style=\"width:100%;border-collapse:collapse;margin-bottom:20px;\">\n  <tr style=\"background:#1976d2;color:white;\"><th colspan=\"2\" style=\"padding:8px;\">📋 DADOS DO INCIDENTE</th></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;width:30%;\"><b>Fornecedor</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Fornecedor }} ({{ $json.Cod_Fornecedor }})</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Part Number</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Part_Number }} | Família: {{ $json.familia }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Data da Ocorrência</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Data }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Problema</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Descricao_Problema }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Causa Raiz</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Causa_Raiz }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Classificação 14Q (IA)</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.categoria_14q }} — Confiança: {{ $json.confianca_14q_pct }}%</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Justificativa IA</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.justificativa_14q }}</td></tr>\n</table>\n\n<h3>📊 ANÁLISE ESTATÍSTICA DETALHADA</h3>\n<pre style=\"background:#f9f9f9;padding:15px;border-radius:5px;white-space:pre-wrap;font-size:12px;border-left:4px solid #1976d2;\">{{ $json.explicacao_calculo }}</pre>\n\n<h3>📦 PEDIDOS EM RISCO (próximos 90 dias)</h3>\n{{ $json.tabela_pedidos_html }}\n\n<h3>✅ CHECKLIST LPC GERADO: {{ $json.checklist_titulo }}</h3>\n<p style=\"color:#555;\"><i>Objetivo: {{ $json.checklist_objetivo }}</i></p>\n{{ $json.checklist_html }}\n{% if $json.checklist_observacoes %}<p><b>Observações:</b> {{ $json.checklist_observacoes }}</p>{% endif %}\n\n<hr style=\"margin:30px 0;\"/>\n<h3>🔴 DECISÃO NECESSÁRIA</h3>\n<p>Por favor, avalie o risco acima e tome uma decisão:</p>\n<table style=\"width:100%;\">\n  <tr>\n    <td style=\"padding:10px;text-align:center;\">\n      <a href=\"{{ $execution.resumeUrl }}?action=approve\" style=\"background:#4caf50;color:white;padding:15px 30px;text-decoration:none;border-radius:5px;font-size:16px;font-weight:bold;\">✅ APROVAR<br/><small>Enviar checklist ao fornecedor</small></a>\n    </td>\n    <td style=\"padding:10px;text-align:center;\">\n      <a href=\"{{ $execution.resumeUrl }}?action=reject\" style=\"background:#f44336;color:white;padding:15px 30px;text-decoration:none;border-radius:5px;font-size:16px;font-weight:bold;\">❌ REJEITAR<br/><small>Apenas monitorar sem ação</small></a>\n    </td>\n  </tr>\n</table>\n<p style=\"color:#999;font-size:11px;margin-top:20px;\">Análise gerada automaticamente em {{ $json.timestamp_alerta }} | ID do Incidente: {{ $json.ID }} | Este link expira em 48 horas.</p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf101-0003",
+      "name": "Enviar Alerta ao Responsavel",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [750, 300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "CONFIGURAR: Crie uma credencial 'Microsoft Outlook OAuth2 API' no N8N. Use o mesmo App Registration do Azure que você usou para o SharePoint. O $execution.resumeUrl nos links é gerado automaticamente pelo N8N."
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "responseCode": 200,
+          "responseData": "Obrigado pela sua decisao. O sistema foi atualizado."
+        }
+      },
+      "id": "wf101-0004",
+      "name": "Aguardar Aprovacao",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1000, 300],
+      "notes": "Pausa a execução aguardando o responsável clicar em Aprovar ou Rejeitar no email. Timeout padrão: 48h. Se não houver resposta, o workflow expira e o incidente fica como 'pendente' nos logs."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-action-approve",
+              "leftValue": "={{ $json.query.action }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf101-0005",
+      "name": "Verificar Decisao",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Verifica se o responsável clicou em APROVAR (?action=approve) ou REJEITAR (?action=reject). Os dados do incidente original foram preservados na execução."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recupera os dados do incidente (preservados no inicio da execucao)\n// e monta o email para o fornecedor com o checklist LPC\nconst decisao = $input.first().json;\n// Os dados do incidente estao na execucao - recuperar do nó Preparar Dados do Alerta\nconst inc = $('Preparar Dados do Alerta').first().json;\n\nconst dataLimite = new Date(Date.now() + 14 * 86400000).toLocaleDateString('pt-BR');\nconst checklistItemsHtml = (inc.checklist_itens||[]).map((it, idx) =>\n  '<tr style=\"background:' + (idx%2===0?'white':'#f9f9f9') + ';\">'\n  + '<td style=\"padding:8px;border:1px solid #ddd;text-align:center;font-weight:bold;\">' + (idx+1) + '</td>'\n  + '<td style=\"padding:8px;border:1px solid #ddd;\"><b>' + (it.ponto_verificacao||'') + '</b><br/><small>Categoria: ' + (it.categoria||'Processo') + '</small></td>'\n  + '<td style=\"padding:8px;border:1px solid #ddd;\">' + (it.criterio_aceite||'') + '</td>'\n  + '<td style=\"padding:8px;border:1px solid #ddd;text-align:center;\">' + (it.frequencia||'Por lote') + '</td>'\n  + '<td style=\"padding:8px;border:1px solid #ddd;text-align:center;\">' + (it.responsavel||'Operador') + '</td>'\n  + '<td style=\"padding:8px;border:1px solid #ddd;text-align:center;\">☐</td>'\n  + '</tr>'\n).join('');\n\nconst checklist_id = 'CKL-' + String(inc.ID||'000') + '-' + Date.now();\n\nreturn [{\n  json: {\n    ...inc,\n    checklist_id,\n    data_limite_resposta: dataLimite,\n    decisao_responsavel: 'APROVADO',\n    timestamp_envio_fornecedor: new Date().toISOString(),\n    email_assunto_fornecedor: '[LPC REQUEST] Layer Process Confirmation - Part: ' + (inc.Part_Number||'') + ' | ' + (inc.checklist_titulo||''),\n    checklist_tabela_html: '<table style=\"width:100%;border-collapse:collapse;\">'\n      + '<tr style=\"background:#1565c0;color:white;\"><th style=\"padding:8px;\">#</th><th style=\"padding:8px;\">Ponto de Verificação</th><th style=\"padding:8px;\">Critério de Aceite</th><th style=\"padding:8px;\">Frequência</th><th style=\"padding:8px;\">Responsável</th><th style=\"padding:8px;\">OK ✓</th></tr>'\n      + checklistItemsHtml\n      + '</table>',\n    link_formulario_resposta: 'URL_DO_FORMULARIO_MICROSOFT_FORMS_AQUI'\n  }\n}];"
+      },
+      "id": "wf101-0006",
+      "name": "Preparar Email ao Fornecedor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 150],
+      "notes": "CONFIGURAR: Altere 'URL_DO_FORMULARIO_MICROSOFT_FORMS_AQUI' pela URL do seu Microsoft Forms onde o fornecedor responderá o checklist. Crie o formulário com os campos: ID_Checklist, Part_Number, Itens_Concluidos, Observacoes, Evidencias."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_fornecedor || 'EMAIL_FORNECEDOR@fornecedor.com' }}",
+        "subject": "={{ $json.email_assunto_fornecedor }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:850px;margin:0 auto;\">\n<div style=\"background:#1565c0;color:white;padding:15px;border-radius:5px;margin-bottom:20px;\">\n  <h2 style=\"margin:0;\">📋 SOLICITAÇÃO DE LAYER PROCESS CONFIRMATION (LPC)</h2>\n  <p style=\"margin:5px 0 0;\">Ref: {{ $json.checklist_id }}</p>\n</div>\n\n<p>Prezado(a) fornecedor <strong>{{ $json.Fornecedor }}</strong>,</p>\n\n<p>Em atenção à análise de qualidade realizada pelo nosso sistema de prevenção de incidentes, identificamos um risco de reocorrência de falha no item abaixo. Solicitamos que você execute o Layer Process Confirmation (LPC) conforme o checklist a seguir durante a produção deste item.</p>\n\n<table style=\"width:100%;border-collapse:collapse;margin:20px 0;\">\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;width:30%;\"><b>Part Number</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Part_Number }} (Família: {{ $json.familia }})</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Checklist</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.checklist_titulo }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Objetivo</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.checklist_objetivo }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Prazo para Retorno</b></td><td style=\"padding:8px;border:1px solid #ddd;color:#d32f2f;font-weight:bold;\">{{ $json.data_limite_resposta }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Referência ID</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.checklist_id }}</td></tr>\n</table>\n\n<h3>📌 CHECKLIST LPC - PONTOS A VERIFICAR</h3>\n{{ $json.checklist_tabela_html }}\n\n{% if $json.checklist_observacoes %}\n<p><b>Observações Importantes:</b> {{ $json.checklist_observacoes }}</p>\n{% endif %}\n\n<div style=\"background:#e8f5e9;padding:15px;border-radius:5px;margin:20px 0;border-left:4px solid #4caf50;\">\n  <h3 style=\"margin-top:0;\">📝 COMO RESPONDER</h3>\n  <p>Após executar o LPC, preencha o formulário de resposta pelo link abaixo:</p>\n  <p><a href=\"{{ $json.link_formulario_resposta }}\" style=\"background:#4caf50;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;font-size:14px;\">📋 ACESSAR FORMULÁRIO DE RESPOSTA</a></p>\n  <p>Inclua no formulário: evidências fotográficas dos pontos verificados e quaisquer observações ou desvios encontrados.</p>\n  <p>Código de referência para o formulário: <strong>{{ $json.checklist_id }}</strong></p>\n</div>\n\n<p>Em caso de dúvidas, responda este e-mail ou entre em contato com a equipe de qualidade.</p>\n\n<p>Atenciosamente,<br/><b>Equipe de Qualidade de Fornecedores</b><br/><i>Sistema Automático de Prevenção de Incidentes</i></p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf101-0007",
+      "name": "Enviar Checklist ao Fornecedor",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1750, 150],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "CONFIGURAR: $json.email_fornecedor deve ser o endereço do fornecedor. Adicione uma coluna 'Email_Qualidade' na aba de cadastro de fornecedores e enriqueça o incidente com esse dado no WF-100. O link_formulario_resposta é definido no nó 'Preparar Email ao Fornecedor'."
+    },
+    {
+      "parameters": {
+        "jsCode": "const inc = $('Preparar Dados do Alerta').first().json;\nreturn [{\n  json: {\n    ...inc,\n    checklist_id: 'CKL-' + String(inc.ID||'000') + '-' + Date.now(),\n    decisao_responsavel: 'REJEITADO',\n    motivo_rejeicao: 'Responsavel optou por monitoramento sem acao direta',\n    timestamp_decisao: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "wf101-0008",
+      "name": "Registrar Decisao Rejeicao",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 450],
+      "notes": "Caso o responsável rejeite o envio ao fornecedor. O incidente é registrado como 'monitoramento' no SharePoint. O sistema continuará monitorando nas análises futuras."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_CHECKLISTS_FILE_ID/workbook/worksheets/Checklists/tables/TabelaChecklists/rows/add",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ {values: [[String($json.checklist_id||''), new Date().toISOString(), String($json.Fornecedor||''), String($json.Cod_Fornecedor||''), String($json.Part_Number||''), String($json.familia||''), String($json.categoria_14q||''), String($json.checklist_titulo||''), String($json.decisao_responsavel||''), String($json.timestamp_envio_fornecedor||''), 'AGUARDANDO_RESPOSTA', '', String($json.prob_final_pct||0)+'%']]} }}",
+        "options": {}
+      },
+      "id": "wf101-0009",
+      "name": "Salvar Status no SharePoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2000, 300],
+      "notes": "CONFIGURAR: SEU_CHECKLISTS_FILE_ID é o ID do arquivo checklists_enviados.xlsx no SharePoint. A aba 'Checklists' deve ter tabela 'TabelaChecklists' com colunas: Checklist_ID, Data_Criacao, Fornecedor, Cod_Fornecedor, Part_Number, Familia, 14Q, Titulo, Decisao, Data_Envio, Status, Data_Resposta, Prob_Final."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "URL_DO_WEBHOOK_DO_WORKFLOW_FOLLOWUP_AQUI",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json }}",
+        "options": {}
+      },
+      "id": "wf101-0010",
+      "name": "Acionar Sistema de Followup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2250, 150],
+      "notes": "CONFIGURAR: Substitua URL_DO_WEBHOOK_DO_WORKFLOW_FOLLOWUP_AQUI pela URL do webhook do Workflow 3 (WF-102). O follow-up é iniciado SOMENTE quando o checklist é aprovado e enviado ao fornecedor."
+    }
+  ],
+  "connections": {
+    "Receber Dados do WF1": {
+      "main": [
+        [{ "node": "Preparar Dados do Alerta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Dados do Alerta": {
+      "main": [
+        [{ "node": "Enviar Alerta ao Responsavel", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enviar Alerta ao Responsavel": {
+      "main": [
+        [{ "node": "Aguardar Aprovacao", "type": "main", "index": 0 }]
+      ]
+    },
+    "Aguardar Aprovacao": {
+      "main": [
+        [{ "node": "Verificar Decisao", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificar Decisao": {
+      "main": [
+        [{ "node": "Preparar Email ao Fornecedor", "type": "main", "index": 0 }],
+        [{ "node": "Registrar Decisao Rejeicao", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Email ao Fornecedor": {
+      "main": [
+        [{ "node": "Enviar Checklist ao Fornecedor", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enviar Checklist ao Fornecedor": {
+      "main": [
+        [{ "node": "Salvar Status no SharePoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Registrar Decisao Rejeicao": {
+      "main": [
+        [{ "node": "Salvar Status no SharePoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salvar Status no SharePoint": {
+      "main": [
+        [{ "node": "Acionar Sistema de Followup", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "templateId": "WF-101",
+    "descricao": "Human-in-the-Loop: Recebe alertas do WF-100, envia email ao responsável com análise completa + checklist LPC, aguarda aprovação/rejeição via link, envia checklist ao fornecedor se aprovado e aciona o sistema de follow-up."
+  },
+  "tags": ["qualidade", "fornecedores", "hitl", "human-in-the-loop", "email", "aprovacao"]
+}

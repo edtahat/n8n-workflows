@@ -1,0 +1,438 @@
+{
+  "name": "WF-102 | Prevenção de Incidentes - Follow-up de Fornecedor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supplier-followup-iniciar",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wf102-0001",
+      "name": "Iniciar Followup",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "supplier-followup-webhook",
+      "notes": "CONFIGURAR: Este webhook é chamado pelo WF-101 quando um checklist é enviado ao fornecedor. Copie a URL deste webhook e cole no nó 'Acionar Sistema de Followup' do WF-101."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Registra o inicio do followup com os dados do checklist enviado\nconst dados = $input.first().json.body || $input.first().json;\nconst agora = new Date();\n\n// Calcular datas dos lembretes\nconst data3dias = new Date(agora.getTime() + 3 * 86400000).toISOString();\nconst data7dias = new Date(agora.getTime() + 7 * 86400000).toISOString();\nconst data14dias = new Date(agora.getTime() + 14 * 86400000).toISOString();\n\nconsole.log('Followup iniciado para checklist:', dados.checklist_id, '| Fornecedor:', dados.Fornecedor);\n\nreturn [{\n  json: {\n    ...dados,\n    status_followup: 'INICIADO',\n    data_inicio_followup: agora.toISOString(),\n    data_lembrete_1: data3dias,\n    data_lembrete_2: data7dias,\n    data_escalacao: data14dias,\n    contador_lembretes: 0,\n    email_gestor: 'SEU_EMAIL_GESTOR@empresa.com'\n  }\n}];"
+      },
+      "id": "wf102-0002",
+      "name": "Registrar Inicio Followup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "notes": "CONFIGURAR: Altere 'SEU_EMAIL_GESTOR@empresa.com' para o email do gestor de qualidade que receberá escalações. Calcula as datas dos lembretes automaticamente."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "wf102-0003",
+      "name": "Verificacao Diaria 09h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 550],
+      "notes": "Executa diariamente às 09:00 para verificar checklists pendentes. Este é um trigger SEPARADO do webhook de início. Ambos os fluxos (webhook + cron) alimentam o sistema de verificação."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_CHECKLISTS_FILE_ID/workbook/worksheets/Checklists/usedRange",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "options": {}
+      },
+      "id": "wf102-0004",
+      "name": "Ler Checklists Pendentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 550],
+      "notes": "CONFIGURAR: Lê todos os checklists do SharePoint. O nó seguinte filtrará os que têm status AGUARDANDO_RESPOSTA para verificar lembretes necessários."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parseia a aba Checklists e filtra apenas os pendentes\nconst data = $input.first().json;\nif (!data.values || data.values.length <= 1) {\n  return [{json: {nenhum_pendente: true, mensagem: 'Nenhum checklist pendente encontrado.'}}];\n}\nconst headers = data.values[0];\nconst rows = data.values.slice(1);\nconst items = rows.map(row => {\n  const obj = {};\n  headers.forEach((h, i) => { obj[String(h)] = row[i]; });\n  return obj;\n}).filter(r => r.Status === 'AGUARDANDO_RESPOSTA');\n\nif (!items.length) return [{json: {nenhum_pendente: true, mensagem: 'Nenhum checklist aguardando resposta.'}}];\n\n// Calcular dias desde o envio para cada checklist\nconst agora = new Date();\nreturn items.map(item => {\n  const dataEnvio = new Date(item.Data_Envio || item.Data_Criacao || agora);\n  const diasDesdeEnvio = Math.floor((agora - dataEnvio) / 86400000);\n  let acaoNecessaria = 'NENHUMA';\n  if (diasDesdeEnvio >= 14) acaoNecessaria = 'ESCALACAO';\n  else if (diasDesdeEnvio >= 7) acaoNecessaria = 'LEMBRETE_2';\n  else if (diasDesdeEnvio >= 3) acaoNecessaria = 'LEMBRETE_1';\n  return {json: {...item, dias_desde_envio: diasDesdeEnvio, acao_necessaria: acaoNecessaria}};\n});"
+      },
+      "id": "wf102-0005",
+      "name": "Filtrar e Classificar Pendentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 550],
+      "notes": "Classifica cada checklist pendente pela ação necessária: LEMBRETE_1 (3+ dias), LEMBRETE_2 (7+ dias), ESCALACAO (14+ dias), NENHUMA (ainda no prazo)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "check-nenhum",
+              "leftValue": "={{ $json.nenhum_pendente }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf102-0006",
+      "name": "Tem Checklists Pendentes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 550],
+      "notes": "Verifica se há checklists pendentes a processar. Se não, o workflow termina sem ação."
+    },
+    {
+      "parameters": {},
+      "id": "wf102-0007",
+      "name": "Sem Pendentes - Fim",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1250, 700],
+      "notes": "Nenhum checklist pendente hoje. Sistema funcionando normalmente."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "check-acao",
+              "leftValue": "={{ $json.acao_necessaria }}",
+              "rightValue": "NENHUMA",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf102-0008",
+      "name": "Requer Acao?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 550],
+      "notes": "Filtra checklists que ainda estão no prazo (sem ação necessária hoje)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "check-escalacao",
+              "leftValue": "={{ $json.acao_necessaria }}",
+              "rightValue": "ESCALACAO",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf102-0009",
+      "name": "E Escalacao (14+ dias)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 550],
+      "notes": "Separa escalações (14+ dias) de lembretes normais (3 ou 7 dias)."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_fornecedor || 'EMAIL_FORNECEDOR@fornecedor.com' }}",
+        "subject": "={{ '[LEMBRETE ' + $json.dias_desde_envio + ' dias] Layer Process Confirmation Pendente - ' + $json.Part_Number }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:700px;margin:0 auto;\">\n<div style=\"background:#f57c00;color:white;padding:12px;border-radius:5px;margin-bottom:15px;\">\n  <h3 style=\"margin:0;\">🔔 LEMBRETE - Layer Process Confirmation Pendente</h3>\n</div>\n<p>Prezado(a) <strong>{{ $json.Fornecedor }}</strong>,</p>\n<p>Ainda não recebemos a resposta do checklist LPC que enviamos há <strong>{{ $json.dias_desde_envio }} dias</strong>.</p>\n<table style=\"width:100%;border-collapse:collapse;margin:15px 0;\">\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Checklist</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Titulo || $json.checklist_titulo }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Part Number</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Part_Number }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Referência</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Checklist_ID || $json.checklist_id }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Data de Envio</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Data_Envio }}</td></tr>\n</table>\n<p>Por favor, acesse o formulário de resposta e confirme a execução do LPC:</p>\n<p><a href=\"{{ $json.link_formulario_resposta || 'URL_DO_FORMULARIO_AQUI' }}\" style=\"background:#f57c00;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;\">📋 RESPONDER AGORA</a></p>\n<p style=\"color:#666;font-size:12px;\">Lembrete automático {{ $json.acao_necessaria }} | Dias em aberto: {{ $json.dias_desde_envio }}</p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf102-0010",
+      "name": "Enviar Lembrete ao Fornecedor",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1750, 400],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "Envia lembrete ao fornecedor (3 dias = 1º lembrete, 7 dias = 2º lembrete). O email inclui o link para o formulário de resposta."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_gestor || 'EMAIL_GESTOR@empresa.com' }}",
+        "subject": "={{ '[ESCALACAO URGENTE] Checklist LPC sem resposta - ' + $json.dias_desde_envio + ' dias - ' + $json.Fornecedor }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:700px;margin:0 auto;\">\n<div style=\"background:#d32f2f;color:white;padding:12px;border-radius:5px;margin-bottom:15px;\">\n  <h3 style=\"margin:0;\">🚨 ESCALAÇÃO URGENTE - Checklist LPC sem resposta há {{ $json.dias_desde_envio }} dias</h3>\n</div>\n<p>O fornecedor <strong>{{ $json.Fornecedor }}</strong> não respondeu ao checklist LPC enviado há <strong>{{ $json.dias_desde_envio }} dias</strong>. É necessária intervenção direta.</p>\n<table style=\"width:100%;border-collapse:collapse;margin:15px 0;\">\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Fornecedor</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Fornecedor }} ({{ $json.Cod_Fornecedor }})</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Part Number</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Part_Number }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Probabilidade de Falha</b></td><td style=\"padding:8px;border:1px solid #ddd;font-weight:bold;color:#d32f2f;\">{{ $json.Prob_Final || $json.prob_final_pct }}%</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Data Envio do Checklist</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Data_Envio }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>ID do Checklist</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Checklist_ID || $json.checklist_id }}</td></tr>\n</table>\n<p><b>Ações recomendadas:</b></p>\n<ul>\n  <li>Contato direto com o representante de qualidade do fornecedor</li>\n  <li>Revisão de pedidos pendentes para este part number</li>\n  <li>Considerar inspeção de recebimento reforçada nas próximas entregas</li>\n</ul>\n<p style=\"color:#666;font-size:12px;\">Escalação automática do sistema de follow-up | ID: {{ $json.Checklist_ID || $json.checklist_id }}</p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf102-0011",
+      "name": "Escalacao ao Gestor",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1750, 700],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "CONFIGURAR: Envia escalação ao gestor de qualidade quando o fornecedor não responde em 14+ dias. Altere email_gestor no nó 'Registrar Inicio Followup'."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "supplier-forms-resposta",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wf102-0012",
+      "name": "Receber Resposta do Formulario",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 900],
+      "webhookId": "supplier-forms-resposta-webhook",
+      "notes": "CONFIGURAR: Este webhook recebe respostas do Microsoft Forms. No Microsoft Forms, configure o 'Power Automate' ou use o conector do Forms no N8N para enviar respostas a este webhook. Dados esperados: Checklist_ID, Part_Number, Itens_Concluidos (lista), Observacoes, Evidencias_URLs."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analisa a completude do checklist respondido pelo fornecedor\nconst resp = $input.first().json.body || $input.first().json;\n\n// Determinar completude\nconst itensConcluidos = resp.Itens_Concluidos || resp.itens_concluidos || [];\nconst totalItens = resp.Total_Itens || itensConcluidos.length || 0;\nconst itensConcluidos_n = Array.isArray(itensConcluidos) ? itensConcluidos.length : Number(itensConcluidos) || 0;\nconst pct_conclusao = totalItens > 0 ? Math.round((itensConcluidos_n / totalItens) * 100) : 0;\nconst completo = pct_conclusao >= 90; // 90% ou mais = considerado completo\nconst temDesvios = resp.Desvios_Encontrados === 'SIM' || resp.desvios_encontrados === true;\n\n// Status da resposta\nlet statusResposta = 'INCOMPLETO';\nif (completo && !temDesvios) statusResposta = 'COMPLETO_OK';\nelse if (completo && temDesvios) statusResposta = 'COMPLETO_COM_DESVIOS';\nelse if (pct_conclusao >= 50) statusResposta = 'PARCIAL';\n\n// Detectar se a resposta revela uma nova ocorrencia ou aprendizado\n// Se o fornecedor relata desvio NAO previsto no checklist = novo aprendizado\nconst novoAprendizado = temDesvios && (resp.Desvio_Nao_Previsto === 'SIM' || resp.desvio_nao_previsto === true);\n\nconsole.log('Resposta recebida. Checklist:', resp.Checklist_ID, '| Completude:', pct_conclusao + '%', '| Status:', statusResposta);\n\nreturn [{\n  json: {\n    ...resp,\n    pct_conclusao,\n    completo,\n    tem_desvios: temDesvios,\n    status_resposta: statusResposta,\n    novo_aprendizado: novoAprendizado,\n    data_resposta: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "wf102-0013",
+      "name": "Analisar Resposta do Checklist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 900],
+      "notes": "Analisa se o checklist foi completado (>=90% dos itens), se há desvios e se foi encontrado algo novo (aprendizado). Classifica: COMPLETO_OK, COMPLETO_COM_DESVIOS, PARCIAL, INCOMPLETO."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "check-completo",
+              "leftValue": "={{ $json.completo }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf102-0014",
+      "name": "Checklist Completo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [750, 900],
+      "notes": "Checklist completo (>=90%): fecha o caso e registra aprendizado se necessário. Incompleto: solicita complemento ao fornecedor."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_CHECKLISTS_FILE_ID/workbook/worksheets/Checklists/tables/TabelaChecklists/rows/add",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ {values: [[String($json.Checklist_ID||''), '', '', '', String($json.Part_Number||''), '', '', '', 'APROVADO', '', String($json.status_resposta), new Date().toISOString(), '']]} }}",
+        "options": {}
+      },
+      "id": "wf102-0015",
+      "name": "Fechar Caso no SharePoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 800],
+      "notes": "CONFIGURAR: Atualiza o status do checklist para COMPLETO no SharePoint. Em produção, use a operação PATCH/UPDATE da API do Excel em vez de criar uma nova linha."
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\n// Registrar como caso de aprendizado se houve desvio nao previsto\nif (!resp.novo_aprendizado) {\n  return [{json: {...resp, registrou_aprendizado: false}}];\n}\n\nconsole.log('NOVO APRENDIZADO detectado no checklist', resp.Checklist_ID, '- Desvio não previsto reportado pelo fornecedor.');\n\nreturn [{\n  json: {\n    ...resp,\n    registrou_aprendizado: true,\n    aprendizado: {\n      checklist_id: resp.Checklist_ID || '',\n      data: new Date().toISOString(),\n      fornecedor: resp.Fornecedor || '',\n      part_number: resp.Part_Number || '',\n      descricao_desvio: resp.Descricao_Desvio || resp.Observacoes || '',\n      tipo: 'DESVIO_NAO_PREVISTO_EM_CHECKLIST',\n      status_validacao: 'PENDENTE',\n      impacto_nos_modelos: 'A ser avaliado pelo engenheiro de qualidade'\n    }\n  }\n}];"
+      },
+      "id": "wf102-0016",
+      "name": "Registrar Aprendizado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 800],
+      "notes": "Módulo de aprendizado: se o fornecedor relata um desvio NÃO previsto no checklist, registra como caso de aprendizado para melhorar os modelos futuros. O engenheiro de qualidade valida e atualiza a base de conhecimento."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/sites/SEU_SHAREPOINT_SITE_ID/drive/items/SEU_INCIDENTES_FILE_ID/workbook/worksheets/Aprendizado/tables/TabelaAprendizado/rows/add",
+        "authentication": "oAuth2",
+        "credentials": {
+          "oAuth2Api": {
+            "id": "CONFIGURAR_ID",
+            "name": "Microsoft 365 Graph API"
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json.registrou_aprendizado ? {values: [[String($json.aprendizado.checklist_id), String($json.aprendizado.data), String($json.aprendizado.fornecedor), String($json.aprendizado.part_number), String($json.aprendizado.descricao_desvio), String($json.aprendizado.tipo), String($json.aprendizado.status_validacao), String($json.aprendizado.impacto_nos_modelos), 'NAO']]} : {values: [[]]} }}",
+        "options": {}
+      },
+      "id": "wf102-0017",
+      "name": "Salvar Aprendizado SharePoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1500, 800],
+      "notes": "CONFIGURAR: Salva o novo aprendizado na aba 'Aprendizado' do Excel. Tabela 'TabelaAprendizado' com colunas: Checklist_ID, Data, Fornecedor, Part_Number, Descricao_Desvio, Tipo, Status_Validacao, Impacto_Modelos, Validado."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_gestor || 'EMAIL_GESTOR@empresa.com' }}",
+        "subject": "=[APRENDIZADO REGISTRADO] Novo Desvio não Mapeado - {{ $json.Part_Number }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:700px;margin:0 auto;\">\n<div style=\"background:#7b1fa2;color:white;padding:12px;border-radius:5px;margin-bottom:15px;\">\n  <h3 style=\"margin:0;\">🧠 NOVO APRENDIZADO IDENTIFICADO</h3>\n  <p style=\"margin:5px 0 0;\">Um desvio não previsto foi reportado pelo fornecedor</p>\n</div>\n<p>O fornecedor <strong>{{ $json.Fornecedor }}</strong> reportou um desvio que não estava previsto no checklist LPC. Este caso foi registrado para análise e melhoria dos modelos de prevenção.</p>\n<table style=\"width:100%;border-collapse:collapse;margin:15px 0;\">\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Checklist ID</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Checklist_ID }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Part Number</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Part_Number }}</td></tr>\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Descrição do Desvio</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Descricao_Desvio || $json.Observacoes }}</td></tr>\n</table>\n<p><b>Ação necessária:</b> Revise este caso na aba 'Aprendizado' do Excel e:</p>\n<ol>\n  <li>Verifique se o desvio deve ser adicionado como um novo tipo de checklist</li>\n  <li>Determine se o 14Q atribuído ao incidente original estava correto</li>\n  <li>Atualize a coluna 'Validado' para 'SIM' após revisão</li>\n  <li>Se necessário, re-execute a análise do incidente com a classificação corrigida</li>\n</ol>\n<p style=\"color:#666;font-size:12px;\">Caso registrado automaticamente para melhoria contínua do sistema.</p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf102-0018",
+      "name": "Notificar Engenheiro Aprendizado",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1750, 900],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "Notifica o engenheiro de qualidade sobre o novo aprendizado para que ele valide e atualize a base de conhecimento. Este é o ciclo de feedback para melhoria contínua do sistema."
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $json.email_fornecedor || 'EMAIL_FORNECEDOR@fornecedor.com' }}",
+        "subject": "=[COMPLEMENTO NECESSÁRIO] Checklist LPC Incompleto - {{ $json.Part_Number }}",
+        "bodyContent": "=<html><body style=\"font-family:Arial,sans-serif;max-width:700px;margin:0 auto;\">\n<div style=\"background:#e65100;color:white;padding:12px;border-radius:5px;margin-bottom:15px;\">\n  <h3 style=\"margin:0;\">⚠️ CHECKLIST LPC INCOMPLETO - Complemento Necessário</h3>\n</div>\n<p>Recebemos a resposta do checklist LPC, porém os dados estão incompletos ({{ $json.pct_conclusao }}% concluído).</p>\n<table style=\"width:100%;border-collapse:collapse;margin:15px 0;\">\n  <tr style=\"background:#f5f5f5;\"><td style=\"padding:8px;border:1px solid #ddd;\"><b>Checklist</b></td><td style=\"padding:8px;border:1px solid #ddd;\">{{ $json.Checklist_ID }}</td></tr>\n  <tr><td style=\"padding:8px;border:1px solid #ddd;\"><b>Completude</b></td><td style=\"padding:8px;border:1px solid #ddd;color:#e65100;font-weight:bold;\">{{ $json.pct_conclusao }}% (mínimo necessário: 90%)</td></tr>\n</table>\n<p>Por favor, acesse o formulário e complete os itens pendentes:</p>\n<p><a href=\"{{ $json.link_formulario_resposta || 'URL_DO_FORMULARIO_AQUI' }}\" style=\"background:#e65100;color:white;padding:12px 24px;text-decoration:none;border-radius:5px;\">📋 COMPLETAR CHECKLIST</a></p>\n</body></html>",
+        "bodyContentType": "HTML",
+        "additionalFields": {}
+      },
+      "id": "wf102-0019",
+      "name": "Solicitar Complemento ao Fornecedor",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1000, 1050],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "CONFIGURAR_ID_OUTLOOK",
+          "name": "Microsoft Outlook"
+        }
+      },
+      "notes": "Solicita ao fornecedor que complete os itens faltantes do checklist LPC quando a resposta está incompleta (<90%)."
+    }
+  ],
+  "connections": {
+    "Iniciar Followup": {
+      "main": [
+        [{ "node": "Registrar Inicio Followup", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificacao Diaria 09h": {
+      "main": [
+        [{ "node": "Ler Checklists Pendentes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ler Checklists Pendentes": {
+      "main": [
+        [{ "node": "Filtrar e Classificar Pendentes", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filtrar e Classificar Pendentes": {
+      "main": [
+        [{ "node": "Tem Checklists Pendentes?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tem Checklists Pendentes?": {
+      "main": [
+        [{ "node": "Requer Acao?", "type": "main", "index": 0 }],
+        [{ "node": "Sem Pendentes - Fim", "type": "main", "index": 0 }]
+      ]
+    },
+    "Requer Acao?": {
+      "main": [
+        [{ "node": "E Escalacao (14+ dias)?", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "E Escalacao (14+ dias)?": {
+      "main": [
+        [{ "node": "Escalacao ao Gestor", "type": "main", "index": 0 }],
+        [{ "node": "Enviar Lembrete ao Fornecedor", "type": "main", "index": 0 }]
+      ]
+    },
+    "Receber Resposta do Formulario": {
+      "main": [
+        [{ "node": "Analisar Resposta do Checklist", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analisar Resposta do Checklist": {
+      "main": [
+        [{ "node": "Checklist Completo?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Checklist Completo?": {
+      "main": [
+        [{ "node": "Fechar Caso no SharePoint", "type": "main", "index": 0 }],
+        [{ "node": "Solicitar Complemento ao Fornecedor", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fechar Caso no SharePoint": {
+      "main": [
+        [{ "node": "Registrar Aprendizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Registrar Aprendizado": {
+      "main": [
+        [{ "node": "Salvar Aprendizado SharePoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "Salvar Aprendizado SharePoint": {
+      "main": [
+        [{ "node": "Notificar Engenheiro Aprendizado", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "templateId": "WF-102",
+    "descricao": "Sistema de follow-up de checklists LPC enviados aos fornecedores. Lembretes automáticos em 3, 7 e 14 dias. Escala ao gestor se sem resposta. Recebe e analisa respostas de formulários. Registra novos aprendizados para melhoria contínua dos modelos."
+  },
+  "tags": ["qualidade", "fornecedores", "followup", "lembrete", "aprendizado", "lpc"]
+}

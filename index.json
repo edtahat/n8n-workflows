@@ -85,6 +85,35 @@
         "descricao": "Envia relatório diário automático no Slack",
         "tags": ["slack", "relatorio", "cron", "diario"]
       }
+    ],
+    "ia": [
+      {
+        "id": "WF-100",
+        "nome": "Prevenção de Incidentes - Análise Semanal",
+        "arquivo": "ia/supplier-incident-prevention.json",
+        "descricao": "Análise semanal automática de incidentes de fornecedores com classificação 14Q-Basics Bosch (GPT-4), análise estatística por 3 métodos (PPM + Tendência Temporal + Bayesiana) e cruzamento com pedidos futuros de 90 dias. Integra SharePoint via Microsoft Graph API.",
+        "tags": ["qualidade", "fornecedores", "14q-bosch", "sharepoint", "openai", "prevencao", "analise-semanal"],
+        "dependencias": ["WF-101"],
+        "credenciais_necessarias": ["Microsoft 365 Graph API (OAuth2)", "OpenAI API Key (HTTP Bearer)"]
+      },
+      {
+        "id": "WF-101",
+        "nome": "Prevenção de Incidentes - Alerta Humano (HITL)",
+        "arquivo": "ia/supplier-incident-hitl.json",
+        "descricao": "Human-in-the-Loop: recebe alertas de risco do WF-100, envia email ao responsável interno com análise completa e checklist LPC, aguarda aprovação/rejeição via link no email, e envia o checklist ao fornecedor se aprovado.",
+        "tags": ["qualidade", "fornecedores", "hitl", "human-in-the-loop", "email", "aprovacao"],
+        "dependencias": ["WF-102"],
+        "credenciais_necessarias": ["Microsoft 365 Graph API (OAuth2)", "Microsoft Outlook OAuth2"]
+      },
+      {
+        "id": "WF-102",
+        "nome": "Prevenção de Incidentes - Follow-up de Fornecedor",
+        "arquivo": "ia/supplier-incident-followup.json",
+        "descricao": "Sistema de follow-up de checklists LPC: verifica pendências diariamente, envia lembretes ao fornecedor em 3 e 7 dias, escala ao gestor em 14 dias, recebe e analisa respostas de formulários (Microsoft Forms) e registra novos aprendizados para melhoria contínua.",
+        "tags": ["qualidade", "fornecedores", "followup", "lembrete", "aprendizado", "lpc"],
+        "dependencias": [],
+        "credenciais_necessarias": ["Microsoft 365 Graph API (OAuth2)", "Microsoft Outlook OAuth2"]
+      }
     ]
   }
 }
