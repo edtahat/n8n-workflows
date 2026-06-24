@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Presentation – Bosch Style</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ─── BOSCH DESIGN TOKENS ─── */
+  :root {
+    --bosch-red:      #ec1b24;   /* accent only */
+    --bosch-charcoal: #1f2226;   /* primary dark */
+    --bosch-slate:    #31343a;   /* secondary dark */
+    --bosch-steel:    #4a5058;   /* mid tone */
+    --bosch-silver:   #9da5a8;
+    --bosch-gray:     #bbbec0;
+    --bosch-mist:     #dfe2e4;
+    --bosch-cloud:    #f4f5f6;
+    --bosch-white:    #ffffff;
+    --font-heading:   'Barlow Condensed', sans-serif;
+    --font-body:      'Barlow', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    font-family: var(--font-body);
+    background: #111;
+    overflow: hidden;
+  }
+
+  /* ─── SLIDE ENGINE ─── */
+  .deck { width: 100vw; height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transition: opacity .4s ease, transform .4s ease;
+    transform: translateX(32px);
+    background: var(--bosch-white);
+  }
+  .slide.active  { opacity: 1; pointer-events: all; transform: translateX(0); }
+  .slide.exit    { opacity: 0; transform: translateX(-32px); }
+
+  /* ─── PROGRESS BAR (red accent strip at top) ─── */
+  .progress-bar {
+    position: fixed; top: 0; left: 0;
+    height: 4px; background: var(--bosch-red);
+    transition: width .4s ease; z-index: 2000;
+  }
+
+  /* ─── SLIDE HEADER ─── */
+  .slide-header {
+    display: flex; align-items: center;
+    padding: 22px 56px 18px;
+    border-bottom: 1px solid var(--bosch-mist);
+    flex-shrink: 0; background: var(--bosch-white);
+  }
+  .logo-mark {
+    width: 40px; height: 40px;
+    background: var(--bosch-charcoal);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-right: 14px; flex-shrink: 0;
+  }
+  .logo-mark span {
+    font-family: var(--font-heading);
+    font-weight: 800; font-size: 16px; color: white;
+  }
+  .header-label {
+    font-family: var(--font-heading);
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--bosch-steel);
+  }
+  .header-sep { flex: 1; }
+  .header-tag {
+    font-family: var(--font-heading);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--bosch-red);
+    border: 1.5px solid var(--bosch-red);
+    padding: 4px 12px;
+  }
+
+  /* ─── TYPOGRAPHY ─── */
+  .overline {
+    font-family: var(--font-heading);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--bosch-red); margin-bottom: 10px;
+  }
+  h1 {
+    font-family: var(--font-heading);
+    font-size: clamp(52px, 6.5vw, 88px);
+    font-weight: 800; line-height: .92;
+    color: var(--bosch-charcoal);
+    text-transform: uppercase;
+  }
+  h2 {
+    font-family: var(--font-heading);
+    font-size: clamp(36px, 4.5vw, 56px);
+    font-weight: 700; line-height: .97;
+    color: var(--bosch-charcoal);
+    text-transform: uppercase; margin-bottom: 18px;
+  }
+  h3 {
+    font-family: var(--font-heading);
+    font-size: 18px; font-weight: 700;
+    text-transform: uppercase; margin-bottom: 8px;
+    color: var(--bosch-charcoal);
+  }
+  .lead {
+    font-size: 17px; font-weight: 300; line-height: 1.65;
+    color: var(--bosch-steel); margin-top: 18px;
+    max-width: 500px;
+  }
+  p { font-size: 14px; line-height: 1.7; color: var(--bosch-steel); }
+
+  /* Red accent rule (small, used sparingly) */
+  .red-rule {
+    width: 48px; height: 3px;
+    background: var(--bosch-red);
+    margin: 14px 0;
+  }
+
+  /* ─── TAGS ─── */
+  .tag {
+    display: inline-block;
+    font-family: var(--font-heading);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    padding: 4px 12px; margin: 3px 3px 3px 0;
+  }
+  .tag-outline { border: 1.5px solid var(--bosch-charcoal); color: var(--bosch-charcoal); }
+  .tag-fill    { background: var(--bosch-charcoal); color: white; }
+  .tag-mist    { background: var(--bosch-mist); color: var(--bosch-steel); }
+  .tag-red     { background: var(--bosch-red); color: white; }
+
+  /* ─── NUMBERED LIST ─── */
+  .num-list { list-style: none; }
+  .num-list li {
+    display: flex; align-items: flex-start; gap: 20px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--bosch-mist);
+  }
+  .num-list li:last-child { border-bottom: none; }
+  .num {
+    font-family: var(--font-heading);
+    font-size: 26px; font-weight: 800;
+    color: var(--bosch-red); flex-shrink: 0;
+    line-height: 1; min-width: 44px;
+  }
+  .num-text strong {
+    font-family: var(--font-heading);
+    font-size: 15px; font-weight: 700;
+    text-transform: uppercase; color: var(--bosch-charcoal);
+    display: block; margin-bottom: 3px;
+  }
+  .num-text span { font-size: 13px; color: var(--bosch-silver); }
+
+  /* ─── STEP FLOW ─── */
+  .step-flow { display: flex; flex-direction: column; gap: 10px; }
+  .step {
+    display: flex; align-items: center; gap: 16px;
+    background: var(--bosch-cloud); padding: 14px 18px;
+    border-left: 3px solid var(--bosch-charcoal);
+  }
+  .step-num {
+    font-family: var(--font-heading);
+    font-size: 20px; font-weight: 800;
+    color: var(--bosch-red); flex-shrink: 0; min-width: 28px;
+  }
+  .step strong { display: block; font-size: 13px; font-weight: 700; color: var(--bosch-charcoal); text-transform: uppercase; }
+  .step span   { font-size: 12px; color: var(--bosch-silver); }
+
+  /* ─── METRIC ─── */
+  .metric { text-align: center; padding: 20px; }
+  .metric-value {
+    font-family: var(--font-heading);
+    font-size: 56px; font-weight: 800;
+    color: var(--bosch-charcoal); line-height: 1;
+  }
+  .metric-label {
+    font-size: 12px; color: var(--bosch-silver);
+    text-transform: uppercase; letter-spacing: 1px; margin-top: 6px;
+  }
+  .metric-sep { height: 1px; background: var(--bosch-mist); margin: 4px 20px; }
+
+  /* ─── QUOTE ─── */
+  .quote-block {
+    border-left: 4px solid var(--bosch-charcoal);
+    padding: 16px 24px;
+    background: var(--bosch-cloud);
+    margin: 16px 0;
+  }
+  .quote-block p { font-size: 15px; font-style: italic; color: var(--bosch-charcoal); }
+  .quote-block cite { font-size: 11px; color: var(--bosch-silver); margin-top: 8px; display: block; letter-spacing: 1px; }
+
+  /* ─── CARDS ─── */
+  .card {
+    background: var(--bosch-white);
+    border-top: 3px solid var(--bosch-charcoal);
+    padding: 24px;
+    box-shadow: 0 2px 16px rgba(0,0,0,.07);
+  }
+  .card h3 { font-size: 16px; margin-bottom: 6px; }
+  .card p  { font-size: 13px; }
+
+  /* ─── FEATURE GRID ─── */
+  .feature-item {
+    background: var(--bosch-white); padding: 22px;
+    border-top: 3px solid var(--bosch-charcoal);
+    box-shadow: 0 2px 12px rgba(0,0,0,.05);
+  }
+  .feature-item .icon { font-size: 26px; margin-bottom: 10px; }
+  .feature-item h3 { font-size: 15px; margin-bottom: 6px; }
+  .feature-item p  { font-size: 13px; }
+
+  /* ════════════════════════════════
+     SLIDE-SPECIFIC LAYOUTS
+  ════════════════════════════════ */
+
+  /* ── 01 COVER ── */
+  .slide-cover { background: var(--bosch-charcoal) !important; }
+  .cover-body  { display: flex; flex: 1; }
+  .cover-left  {
+    width: 58%; display: flex; flex-direction: column;
+    justify-content: center; padding: 64px 60px;
+  }
+  .cover-right {
+    flex: 1;
+    background: var(--bosch-cloud);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    position: relative; overflow: hidden;
+  }
+  /* single red accent stripe on the right panel */
+  .cover-right::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px; background: var(--bosch-red);
+  }
+  .cover-right-inner { text-align: center; padding: 48px; }
+  .cover-icon { font-size: 88px; display: block; margin-bottom: 24px; }
+  .cover-tagline {
+    font-family: var(--font-heading);
+    font-size: 13px; font-weight: 600; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--bosch-steel);
+  }
+  .cover-logo {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 36px;
+  }
+  .cover-logo-circle {
+    width: 48px; height: 48px;
+    background: var(--bosch-white); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cover-logo-circle span {
+    font-family: var(--font-heading);
+    font-weight: 800; font-size: 18px; color: var(--bosch-charcoal);
+  }
+  .cover-logo-text {
+    font-family: var(--font-heading);
+    font-size: 24px; font-weight: 700; color: var(--bosch-white);
+    text-transform: uppercase; letter-spacing: 3px;
+  }
+  .cover-left h1 { color: var(--bosch-white); font-size: clamp(52px,6vw,82px); }
+  .cover-left .lead { color: var(--bosch-gray); max-width: 420px; }
+  .cover-tags { margin-top: 32px; }
+  .cover-meta {
+    margin-top: 40px; padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,.12);
+    display: flex; gap: 40px;
+  }
+  .cover-meta-lbl { font-size: 11px; color: rgba(255,255,255,.35); text-transform: uppercase; letter-spacing: 1px; }
+  .cover-meta-val { font-family: var(--font-heading); font-size: 14px; font-weight: 600; color: rgba(255,255,255,.75); margin-top: 2px; }
+
+  /* ── 02 AGENDA ── */
+  .agenda-body { display: flex; flex: 1; }
+  .agenda-left {
+    width: 34%; background: var(--bosch-charcoal);
+    display: flex; flex-direction: column;
+    justify-content: flex-end; padding: 56px 48px;
+  }
+  .agenda-left h2 { color: white; }
+  .agenda-left .overline { color: rgba(255,255,255,.45); }
+  .agenda-right {
+    flex: 1; padding: 56px 60px;
+    display: flex; flex-direction: column;
+    justify-content: center;
+  }
+
+  /* ── SECTION DIVIDER ── */
+  .slide-section {
+    background: var(--bosch-charcoal) !important;
+    flex-direction: column; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .slide-section .section-inner { padding: 80px; position: relative; z-index: 1; }
+  /* subtle geometric accent */
+  .slide-section::after {
+    content: ''; position: absolute;
+    right: 80px; top: 50%; transform: translateY(-50%);
+    width: 240px; height: 240px;
+    border: 2px solid rgba(255,255,255,.06);
+    border-radius: 50%;
+    box-shadow: 0 0 0 40px rgba(255,255,255,.03), 0 0 0 80px rgba(255,255,255,.02);
+  }
+  .slide-section h2 { color: white; font-size: 68px; }
+  .slide-section .overline { color: var(--bosch-red); }
+  .slide-section .lead { color: rgba(255,255,255,.5); }
+  /* red accent line left */
+  .slide-section::before {
+    content: ''; position: absolute;
+    left: 0; top: 20%; bottom: 20%;
+    width: 4px; background: var(--bosch-red);
+  }
+
+  /* ── CASE ── */
+  .case-header {
+    background: var(--bosch-charcoal);
+    padding: 28px 56px;
+    display: flex; align-items: center; gap: 20px;
+    flex-shrink: 0;
+  }
+  .case-header h2 { color: white; font-size: 32px; margin: 0; }
+  .case-body { display: flex; flex: 1; }
+  .case-metrics {
+    width: 28%; background: var(--bosch-cloud);
+    display: flex; flex-direction: column;
+    justify-content: space-around; padding: 36px 28px;
+    border-right: 3px solid var(--bosch-charcoal);
+  }
+  /* red accent on metric values */
+  .case-metrics .metric-value { color: var(--bosch-red); }
+  .case-detail { flex: 1; padding: 36px 56px; }
+
+  /* ── SECONDARY TOPICS ── */
+  .secondary-grid { display: grid; grid-template-columns: 1fr 1fr; flex: 1; }
+  .sec-panel { display: flex; flex-direction: column; justify-content: center; padding: 56px; }
+  .sec-dark  { background: var(--bosch-charcoal); }
+  .sec-dark h2, .sec-dark h3 { color: white; }
+  .sec-dark .overline { color: var(--bosch-red); }
+  .sec-dark p { color: rgba(255,255,255,.55); }
+  .sec-light { background: var(--bosch-cloud); }
+
+  /* ── CLOSING ── */
+  .slide-closing {
+    background: var(--bosch-charcoal) !important;
+    flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; position: relative; overflow: hidden;
+  }
+  .slide-closing .inner { position: relative; z-index: 1; }
+  .slide-closing h1 { color: white; }
+  .slide-closing p  { color: rgba(255,255,255,.55); font-size: 17px; margin-top: 18px; }
+  .closing-rule { width: 64px; height: 3px; background: var(--bosch-red); margin: 22px auto; }
+  /* geometric circles */
+  .slide-closing::before {
+    content: ''; position: absolute;
+    top: -140px; left: -140px;
+    width: 480px; height: 480px;
+    border: 1.5px solid rgba(255,255,255,.05);
+    border-radius: 50%;
+  }
+  .slide-closing::after {
+    content: ''; position: absolute;
+    bottom: -100px; right: -100px;
+    width: 360px; height: 360px;
+    border: 1.5px solid rgba(255,255,255,.05);
+    border-radius: 50%;
+  }
+
+  /* ─── NAVIGATION ─── */
+  .nav {
+    position: fixed; bottom: 24px; right: 32px;
+    display: flex; align-items: center; gap: 10px; z-index: 1000;
+  }
+  .nav-btn {
+    width: 40px; height: 40px;
+    background: white; border: 1.5px solid var(--bosch-mist);
+    cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    transition: all .2s; color: var(--bosch-charcoal);
+  }
+  .nav-btn:hover { background: var(--bosch-charcoal); color: white; border-color: var(--bosch-charcoal); }
+  .nav-counter {
+    font-family: var(--font-heading);
+    font-size: 12px; font-weight: 700;
+    color: rgba(255,255,255,.6);
+    background: rgba(0,0,0,.45);
+    padding: 6px 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ══ 01 COVER ══ -->
+  <div class="slide slide-cover active" id="s0">
+    <div class="cover-body">
+      <div class="cover-left">
+        <div class="cover-logo">
+          <div class="cover-logo-circle"><span>B</span></div>
+          <span class="cover-logo-text">Bosch</span>
+        </div>
+        <div class="overline">Inovação &amp; Transformação Digital</div>
+        <h1>Inteligência<br>Artificial</h1>
+        <div class="red-rule"></div>
+        <p class="lead">Ferramentas de IA que transformam a forma como trabalhamos, criamos e decidimos — hoje.</p>
+        <div class="cover-tags">
+          <span class="tag tag-mist">Copilot Studio</span>
+          <span class="tag tag-mist">NotebookLM</span>
+          <span class="tag tag-mist">N8N</span>
+          <span class="tag tag-mist">Excel AI</span>
+        </div>
+        <div class="cover-meta">
+          <div>
+            <div class="cover-meta-lbl">Apresentado por</div>
+            <div class="cover-meta-val">Equipe de Inovação</div>
+          </div>
+          <div>
+            <div class="cover-meta-lbl">Data</div>
+            <div class="cover-meta-val">Junho 2026</div>
+          </div>
+        </div>
+      </div>
+      <div class="cover-right">
+        <div class="cover-right-inner">
+          <span class="cover-icon">🤖</span>
+          <div class="cover-tagline">Agentes · Automação<br>Conteúdo · Produtividade</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 02 AGENDA ══ -->
+  <div class="slide" id="s1">
+    <div class="agenda-body">
+      <div class="agenda-left">
+        <div class="overline">Visão Geral</div>
+        <h2>Agenda</h2>
+        <p style="color:rgba(255,255,255,.45); font-size:13px; margin-top:14px; line-height:1.7;">Quatro blocos de conteúdo — da criação de agentes à automação avançada.</p>
+      </div>
+      <div class="agenda-right">
+        <ul class="num-list">
+          <li>
+            <span class="num">01</span>
+            <div class="num-text">
+              <strong>Copilot Studio — Agentes Inteligentes</strong>
+              <span>O que são agentes, arquitetura e capacidades da plataforma</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">02</span>
+            <div class="num-text">
+              <strong>Case de Sucesso</strong>
+              <span>Implementação real, métricas e aprendizados de um agente em produção</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">03</span>
+            <div class="num-text">
+              <strong>NotebookLM — Conteúdo com IA</strong>
+              <span>Apresentações, podcasts e vídeos gerados automaticamente</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">04</span>
+            <div class="num-text">
+              <strong>Temas Secundários</strong>
+              <span>N8N — automação de workflows · Copilot Avançado no Excel</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 03 SECTION: COPILOT STUDIO ══ -->
+  <div class="slide slide-section" id="s2">
+    <div class="section-inner">
+      <div class="overline">Bloco 01</div>
+      <h2>Copilot<br>Studio</h2>
+      <div class="red-rule"></div>
+      <p class="lead">Crie agentes de IA conversacionais conectados a dados reais, sistemas corporativos e fluxos de trabalho — sem escrever código.</p>
+    </div>
+  </div>
+
+  <!-- ══ 04 O QUE SÃO AGENTES ══ -->
+  <div class="slide" id="s3">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">Copilot Studio · Agentes</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 01</span>
+    </div>
+    <div style="flex:1; display:grid; grid-template-columns:1fr 1fr;">
+      <div style="padding:56px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="overline">O que são?</div>
+        <h2>Agentes<br>Inteligentes</h2>
+        <div class="red-rule"></div>
+        <p class="lead" style="font-size:15px;">Agentes são assistentes de IA autônomos que executam tarefas, acessam fontes de conhecimento e interagem com sistemas — de forma conversacional e proativa.</p>
+        <div style="margin-top:22px;">
+          <span class="tag tag-outline">Autônomo</span>
+          <span class="tag tag-outline">Conectado</span>
+          <span class="tag tag-outline">Conversacional</span>
+          <span class="tag tag-outline">Multi-canal</span>
+        </div>
+      </div>
+      <div style="background:var(--bosch-cloud); padding:56px 48px; display:flex; flex-direction:column; justify-content:center; gap:16px;">
+        <div class="feature-item">
+          <div class="icon">🔗</div>
+          <h3>Conectores Nativos</h3>
+          <p>Integração com SharePoint, Dynamics 365, SAP, APIs REST e centenas de serviços via Power Platform.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">🧠</div>
+          <h3>Base de Conhecimento</h3>
+          <p>Indexa documentos internos e responde com base em dados reais da empresa — com citações.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">⚡</div>
+          <h3>Ações Automatizadas</h3>
+          <p>Dispara Power Automate flows, cria tickets, agenda reuniões e atualiza registros.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 05 CASE DE SUCESSO ══ -->
+  <div class="slide" id="s4">
+    <div class="case-header">
+      <span style="font-size:32px;">🏭</span>
+      <div>
+        <div class="overline" style="color:rgba(255,255,255,.45); margin-bottom:4px;">Bloco 02 · Case de Sucesso</div>
+        <h2>Agente de Suporte Técnico Interno</h2>
+      </div>
+    </div>
+    <div class="case-body">
+      <div class="case-metrics">
+        <div class="metric">
+          <div class="metric-value">74%</div>
+          <div class="metric-label">Redução de<br>chamados nível 1</div>
+        </div>
+        <div class="metric-sep"></div>
+        <div class="metric">
+          <div class="metric-value" style="font-size:44px;">2 min</div>
+          <div class="metric-label">Tempo médio<br>de resposta</div>
+        </div>
+        <div class="metric-sep"></div>
+        <div class="metric">
+          <div class="metric-value">4.8★</div>
+          <div class="metric-label">Satisfação<br>dos usuários</div>
+        </div>
+      </div>
+      <div class="case-detail">
+        <div class="overline">Desafio</div>
+        <p style="font-size:15px; margin-bottom:20px;">Equipe de TI sobrecarregada com ~400 chamados/semana de dúvidas repetitivas sobre sistemas internos, VPN, credenciais e onboarding de novos colaboradores.</p>
+        <div class="overline">Solução Implementada</div>
+        <div class="step-flow" style="margin-bottom:20px;">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div>
+              <strong>Base de Conhecimento</strong>
+              <span>Indexação de 2.400 artigos do Wiki interno e manuais de TI</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div>
+              <strong>Agente no Teams</strong>
+              <span>Publicado no Microsoft Teams — zero instalação para os usuários</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div>
+              <strong>Escalada Inteligente</strong>
+              <span>Casos não resolvidos abrem ticket no ServiceNow automaticamente com contexto completo</span>
+            </div>
+          </div>
+        </div>
+        <div class="quote-block">
+          <p>"O agente resolveu em 2 minutos um problema que levaria 2 dias na fila do helpdesk. Mudou a produtividade da equipe."</p>
+          <cite>— Gerente de TI, Unidade de Manufatura</cite>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 06 SECTION: NOTEBOOKLM ══ -->
+  <div class="slide slide-section" id="s5">
+    <div class="section-inner">
+      <div class="overline">Bloco 03</div>
+      <h2>Notebook<br>LM</h2>
+      <div class="red-rule"></div>
+      <p class="lead">A IA do Google que transforma seus documentos em apresentações, podcasts e vídeos — com apenas alguns cliques.</p>
+    </div>
+  </div>
+
+  <!-- ══ 07 NOTEBOOKLM VISÃO GERAL ══ -->
+  <div class="slide" id="s6">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">NotebookLM · Visão Geral</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 03</span>
+    </div>
+    <div style="flex:1; padding:36px 56px;">
+      <div class="overline">Google NotebookLM</div>
+      <h2 style="font-size:40px;">Seu Repositório de Conhecimento com IA</h2>
+      <div class="red-rule"></div>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:24px;">
+        <div class="feature-item">
+          <div class="icon">📄</div>
+          <h3>Fontes Diversas</h3>
+          <p>PDFs, Google Docs, URLs, slides, áudios e vídeos do YouTube como base de conhecimento.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">🎙️</div>
+          <h3>Audio Overview</h3>
+          <p>Gera automaticamente um podcast com 2 apresentadores discutindo o conteúdo em formato natural.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">🖼️</div>
+          <h3>Apresentações</h3>
+          <p>Cria slides estruturados a partir dos seus documentos com pontos-chave e narrativa lógica.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">❓</div>
+          <h3>FAQ Inteligente</h3>
+          <p>Gera perguntas frequentes e guias de estudo baseados no material carregado.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">🔍</div>
+          <h3>Chat com Fontes</h3>
+          <p>Converse com seus documentos — toda resposta vem com citação rastreável da fonte original.</p>
+        </div>
+        <div class="feature-item">
+          <div class="icon">🎬</div>
+          <h3>Vídeos Explicativos</h3>
+          <p>Integra com ferramentas de geração de vídeo para criar conteúdo visual a partir do notebook.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 08 NOTEBOOKLM: APRESENTAÇÕES ══ -->
+  <div class="slide" id="s7">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">NotebookLM · Apresentações</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 03</span>
+    </div>
+    <div style="flex:1; display:grid; grid-template-columns:1fr 1fr;">
+      <div style="background:var(--bosch-cloud); padding:52px 48px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="overline">Passo a Passo</div>
+        <h2 style="font-size:38px;">Criando<br>Apresentações</h2>
+        <div class="red-rule"></div>
+        <div class="step-flow" style="margin-top:18px;">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div><strong>Crie o Notebook</strong><span>Acesse notebooklm.google.com e crie um projeto</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div><strong>Adicione Fontes</strong><span>Carregue PDFs, docs ou URLs relevantes ao tema</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div><strong>Clique em Studio</strong><span>Selecione "Briefing doc" ou "FAQ" como saída</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div><strong>Exporte para Slides</strong><span>Cole no Google Slides ou PowerPoint e aplique o template</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:52px 48px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="overline">Por que usar?</div>
+        <h2 style="font-size:38px;">Impacto<br>Real</h2>
+        <div class="red-rule"></div>
+        <ul class="num-list">
+          <li>
+            <span class="num">10×</span>
+            <div class="num-text">
+              <strong>Mais rápido que preparar manualmente</strong>
+              <span>De horas para minutos com a mesma qualidade de estrutura</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">100%</span>
+            <div class="num-text">
+              <strong>Baseado nos seus dados</strong>
+              <span>Sem alucinações — todo conteúdo rastreado às fontes</span>
+            </div>
+          </li>
+          <li>
+            <span class="num">0</span>
+            <div class="num-text">
+              <strong>Esforço de resumo</strong>
+              <span>A IA condensa documentos extensos automaticamente</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 09 NOTEBOOKLM: ÁUDIO & VÍDEO ══ -->
+  <div class="slide" id="s8">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">NotebookLM · Audio &amp; Vídeo</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 03</span>
+    </div>
+    <div style="flex:1; display:grid; grid-template-columns:1.1fr 1fr;">
+      <div style="padding:52px 56px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="overline">Audio &amp; Vídeo</div>
+        <h2 style="font-size:40px;">Do Texto ao<br>Conteúdo Falado</h2>
+        <div class="red-rule"></div>
+        <p class="lead" style="font-size:15px;">O recurso <strong>Audio Overview</strong> transforma qualquer documento em um podcast realista — dois apresentadores, linguagem natural, perguntas e respostas.</p>
+        <div class="quote-block" style="margin-top:24px;">
+          <p>"Carreguei meu relatório anual e em 3 minutos tinha um episódio de 18 minutos pronto para distribuir para a equipe."</p>
+          <cite>— Gestora de Comunicação Interna</cite>
+        </div>
+      </div>
+      <div style="background:var(--bosch-cloud); padding:52px 48px; display:flex; flex-direction:column; justify-content:center; gap:14px;">
+        <div class="overline">Fluxo Completo</div>
+        <div class="step">
+          <div class="step-num">🎙️</div>
+          <div><strong>Audio Overview</strong><span>Gerado diretamente no NotebookLM Studio</span></div>
+        </div>
+        <div class="step">
+          <div class="step-num">📝</div>
+          <div><strong>Transcrição Automática</strong><span>Use Whisper ou Gemini para transcrever o áudio gerado</span></div>
+        </div>
+        <div class="step">
+          <div class="step-num">🎬</div>
+          <div><strong>Vídeo com IA</strong><span>Combine áudio + slides + avatar via HeyGen ou Synthesia</span></div>
+        </div>
+        <div class="step">
+          <div class="step-num">🚀</div>
+          <div><strong>Publique</strong><span>SharePoint, Teams, YouTube interno — conteúdo pronto</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 10 SECTION: TEMAS SECUNDÁRIOS ══ -->
+  <div class="slide slide-section" id="s9">
+    <div class="section-inner">
+      <div class="overline">Bloco 04</div>
+      <h2>Temas<br>Secundários</h2>
+      <div class="red-rule"></div>
+      <p class="lead">N8N para automação de workflows e Copilot avançado no Excel — produtividade ampliada com IA.</p>
+    </div>
+  </div>
+
+  <!-- ══ 11 N8N ══ -->
+  <div class="slide" id="s10">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">Automação · N8N</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 04</span>
+    </div>
+    <div class="secondary-grid">
+      <div class="sec-panel sec-dark">
+        <div class="overline">Automação Open-Source</div>
+        <h2 style="font-size:52px;">N8N</h2>
+        <div class="red-rule"></div>
+        <p style="font-size:14px; line-height:1.7;">Plataforma de automação visual que conecta centenas de serviços — com suporte a código quando necessário. Auto-hospedável e com nós nativos de IA.</p>
+        <div style="margin-top:20px;">
+          <span class="tag tag-mist">Open-Source</span>
+          <span class="tag tag-mist">400+ Integrações</span>
+          <span class="tag tag-mist">LLM Nodes</span>
+        </div>
+      </div>
+      <div class="sec-panel sec-light">
+        <div class="overline">Casos de Uso</div>
+        <div class="step-flow" style="margin-top:12px;">
+          <div class="step">
+            <div class="step-num">🔄</div>
+            <div><strong>Integração de Sistemas</strong><span>Conecta ERP, CRM, APIs e bancos de dados sem código</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">🤖</div>
+            <div><strong>Agentes de IA Customizados</strong><span>Workflows com GPT-4, Claude ou modelos locais</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">📊</div>
+            <div><strong>ETL &amp; Relatórios</strong><span>Coleta, transforma e envia dados automaticamente</span></div>
+          </div>
+          <div class="step">
+            <div class="step-num">📬</div>
+            <div><strong>Notificações Inteligentes</strong><span>Alertas baseados em eventos com contexto de IA</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 12 COPILOT EXCEL ══ -->
+  <div class="slide" id="s11">
+    <div class="slide-header">
+      <div class="logo-mark"><span>B</span></div>
+      <span class="header-label">Microsoft 365 · Copilot no Excel</span>
+      <div class="header-sep"></div>
+      <span class="header-tag">Bloco 04</span>
+    </div>
+    <div style="flex:1; display:grid; grid-template-columns:1fr 1fr;">
+      <div style="padding:52px 56px; display:flex; flex-direction:column; justify-content:center;">
+        <div class="overline">Copilot Avançado</div>
+        <h2 style="font-size:42px;">Excel com<br>IA Nativa</h2>
+        <div class="red-rule"></div>
+        <p class="lead" style="font-size:15px;">O Copilot no Excel vai além de fórmulas — ele analisa, sugere e transforma dados usando linguagem natural. Sem precisar saber DAX ou M.</p>
+        <div style="margin-top:22px;">
+          <span class="tag tag-outline">Python in Excel</span>
+          <span class="tag tag-outline">Análise por Chat</span>
+          <span class="tag tag-fill">M365</span>
+        </div>
+      </div>
+      <div style="background:var(--bosch-cloud); padding:48px; display:flex; flex-direction:column; justify-content:center; gap:14px;">
+        <div class="overline">Funcionalidades Avançadas</div>
+        <div class="card">
+          <div style="font-size:20px; margin-bottom:8px;">📊</div>
+          <h3 style="font-size:15px;">Análise Conversacional</h3>
+          <p>Peça em linguagem natural: <em>"Mostre a tendência de vendas por região com anomalias destacadas"</em></p>
+        </div>
+        <div class="card">
+          <div style="font-size:20px; margin-bottom:8px;">🐍</div>
+          <h3 style="font-size:15px;">Python in Excel</h3>
+          <p>Execute scripts Python nas células — machine learning, visualizações avançadas e estatísticas.</p>
+        </div>
+        <div class="card">
+          <div style="font-size:20px; margin-bottom:8px;">✨</div>
+          <h3 style="font-size:15px;">Fórmulas Geradas por IA</h3>
+          <p>Descreva o que quer calcular — o Copilot escreve, explica e aplica a fórmula.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 13 CLOSING ══ -->
+  <div class="slide slide-closing" id="s12">
+    <div class="inner">
+      <h1>O Futuro<br>é Agora.</h1>
+      <div class="closing-rule"></div>
+      <p>Copilot Studio · NotebookLM · N8N · Copilot Excel<br>Ferramentas reais, resultados reais, hoje.</p>
+      <div style="margin-top:40px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <span class="tag" style="background:rgba(255,255,255,.1); color:rgba(255,255,255,.75);">Piloto Copilot Studio</span>
+        <span class="tag" style="background:rgba(255,255,255,.1); color:rgba(255,255,255,.75);">Treinamento NotebookLM</span>
+        <span class="tag" style="background:rgba(255,255,255,.1); color:rgba(255,255,255,.75);">Workshop N8N</span>
+      </div>
+    </div>
+    <div style="position:absolute; bottom:36px; display:flex; align-items:center; gap:10px; z-index:1;">
+      <div style="width:36px;height:36px;background:rgba(255,255,255,.12);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+        <span style="font-family:var(--font-heading);font-weight:800;font-size:14px;color:rgba(255,255,255,.7);">B</span>
+      </div>
+      <span style="font-family:var(--font-heading);font-size:14px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:3px;">Bosch</span>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<div class="nav">
+  <button class="nav-btn" onclick="navigate(-1)">&#8592;</button>
+  <span class="nav-counter" id="counter">1 / 13</span>
+  <button class="nav-btn" onclick="navigate(1)">&#8594;</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  let current = 0;
+
+  function updateUI() {
+    progress.style.width = ((current + 1) / slides.length * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+  }
+
+  function navigate(dir) {
+    const prev = current;
+    current = Math.max(0, Math.min(slides.length - 1, current + dir));
+    if (prev === current) return;
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('exit');
+    setTimeout(() => slides[prev].classList.remove('exit'), 420);
+    slides[current].classList.add('active');
+    updateUI();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); navigate(1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))        { e.preventDefault(); navigate(-1); }
+  });
+
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; });
+  document.addEventListener('touchend',   e => {
+    const d = e.changedTouches[0].clientX - tx;
+    if (Math.abs(d) > 50) navigate(d < 0 ? 1 : -1);
+  });
+
+  updateUI();
+</script>
+</body>
+</html>
