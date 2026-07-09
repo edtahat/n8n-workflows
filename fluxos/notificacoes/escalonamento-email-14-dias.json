@@ -1,0 +1,209 @@
+{
+  "name": "Escalonamento de Email em 14 Dias",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novo-chamado",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "123a23ee-773b-46c7-9ab1-2e39aa04379a",
+      "name": "Webhook - Novo Chamado",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "escalonamento-14-dias"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-chamado-id",
+              "name": "chamado_id",
+              "type": "string",
+              "value": "={{ $json.chamado_id }}"
+            },
+            {
+              "id": "assign-email-responsavel",
+              "name": "email_responsavel",
+              "type": "string",
+              "value": "={{ $json.email_responsavel }}"
+            },
+            {
+              "id": "assign-email-gerente",
+              "name": "email_gerente",
+              "type": "string",
+              "value": "={{ $json.email_gerente }}"
+            },
+            {
+              "id": "assign-assunto",
+              "name": "assunto",
+              "type": "string",
+              "value": "={{ $json.assunto }}"
+            },
+            {
+              "id": "assign-data-abertura",
+              "name": "data_abertura",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "43881a55-cb9c-4da4-984c-4de870b95558",
+      "name": "Preparar Dados do Chamado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "atendimento@suaempresa.com",
+        "toEmail": "={{ $json.email_responsavel }}",
+        "subject": "=Chamado #{{ $json.chamado_id }}: {{ $json.assunto }}",
+        "emailFormat": "text",
+        "text": "=Olá,\n\nUm novo chamado foi aberto e está sob sua responsabilidade:\n\nChamado: #{{ $json.chamado_id }}\nAssunto: {{ $json.assunto }}\nAberto em: {{ $json.data_abertura }}\n\nCaso não seja resolvido em 14 dias, este chamado será escalado automaticamente para o gerente responsável.\n\nAtenciosamente,\nSistema de Chamados",
+        "options": {}
+      },
+      "id": "5179a2b9-3c50-440d-bde7-5b8de51e6cdd",
+      "name": "Enviar Email Inicial",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [710, 300],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIAL_ID",
+          "name": "SMTP Atendimento"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 14,
+        "unit": "days"
+      },
+      "id": "380546d5-ab81-4444-ae0f-5d0c1cc5e54c",
+      "name": "Aguardar 14 Dias",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [940, 300],
+      "webhookId": "aguardar-14-dias"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sua-api.com/chamados/{{ $json.chamado_id }}/status",
+        "options": {}
+      },
+      "id": "941e09af-c4d7-4d59-a4be-f2658874efce",
+      "name": "Verificar Status do Chamado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1170, 300],
+      "notes": "Ajuste a URL para o endpoint real que retorna o status do chamado (ex: 'aberto' ou 'resolvido')."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condicao-status-aberto",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "resolvido",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "20cb1ef9-4ea4-4cbf-b5fa-26ca46ee4172",
+      "name": "Chamado Ainda Aberto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "atendimento@suaempresa.com",
+        "toEmail": "={{ $('Preparar Dados do Chamado').item.json.email_gerente }}",
+        "subject": "=[ESCALADO] Chamado #{{ $('Preparar Dados do Chamado').item.json.chamado_id }} sem resolução há 14 dias",
+        "emailFormat": "text",
+        "text": "=Olá,\n\nO chamado abaixo não foi resolvido dentro do prazo de 14 dias e está sendo escalado para sua análise:\n\nChamado: #{{ $('Preparar Dados do Chamado').item.json.chamado_id }}\nAssunto: {{ $('Preparar Dados do Chamado').item.json.assunto }}\nResponsável original: {{ $('Preparar Dados do Chamado').item.json.email_responsavel }}\nAberto em: {{ $('Preparar Dados do Chamado').item.json.data_abertura }}\n\nPor favor, verifique o andamento e tome as providências necessárias.\n\nAtenciosamente,\nSistema de Chamados",
+        "options": {}
+      },
+      "id": "dae22b74-5e63-40a3-86cf-8b605cdb0b34",
+      "name": "Escalar para Gerente",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1630, 200],
+      "credentials": {
+        "smtp": {
+          "id": "SMTP_CREDENTIAL_ID",
+          "name": "SMTP Atendimento"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "241a7cda-63a8-45f9-9a22-c7df47da4efa",
+      "name": "Encerrar - Resolvido",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1630, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - Novo Chamado": {
+      "main": [
+        [{ "node": "Preparar Dados do Chamado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Dados do Chamado": {
+      "main": [
+        [{ "node": "Enviar Email Inicial", "type": "main", "index": 0 }]
+      ]
+    },
+    "Enviar Email Inicial": {
+      "main": [
+        [{ "node": "Aguardar 14 Dias", "type": "main", "index": 0 }]
+      ]
+    },
+    "Aguardar 14 Dias": {
+      "main": [
+        [{ "node": "Verificar Status do Chamado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificar Status do Chamado": {
+      "main": [
+        [{ "node": "Chamado Ainda Aberto?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Chamado Ainda Aberto?": {
+      "main": [
+        [{ "node": "Escalar para Gerente", "type": "main", "index": 0 }],
+        [{ "node": "Encerrar - Resolvido", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateId": "WF-032",
+    "descricao": "Envia email inicial ao responsável por um chamado, aguarda 14 dias e, se o chamado ainda não estiver resolvido, escalona automaticamente por email para o gerente."
+  },
+  "tags": ["email", "escalonamento", "notificacao", "sla"]
+}
