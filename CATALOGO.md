@@ -32,7 +32,8 @@ O arquivo JSON será gerado e salvo automaticamente neste repositório.
 
 | ID | Nome | Categoria | Descrição |
 |----|------|-----------|-----------|
-| — | — | — | Nenhum fluxo criado ainda. Solicite o primeiro! |
+| WF-001 | Webhook Simples | basicos | Recebe dados via webhook e retorna resposta |
+| WF-032 | Escalonamento de Email em 14 Dias | notificacoes | Envia email inicial, aguarda 14 dias e escalona para o gerente se o chamado não for resolvido |
 
 ---
 *Gerado e mantido com Claude Code*

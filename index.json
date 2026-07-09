@@ -84,6 +84,13 @@
         "arquivo": "notificacoes/relatorio-diario-slack.json",
         "descricao": "Envia relatório diário automático no Slack",
         "tags": ["slack", "relatorio", "cron", "diario"]
+      },
+      {
+        "id": "WF-032",
+        "nome": "Escalonamento de Email em 14 Dias",
+        "arquivo": "notificacoes/escalonamento-email-14-dias.json",
+        "descricao": "Envia email inicial, aguarda 14 dias e escalona para o gerente se o chamado não for resolvido",
+        "tags": ["email", "escalonamento", "notificacao", "sla"]
       }
     ]
   }
