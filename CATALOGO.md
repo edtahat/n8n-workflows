@@ -32,7 +32,8 @@ O arquivo JSON será gerado e salvo automaticamente neste repositório.
 
 | ID | Nome | Categoria | Descrição |
 |----|------|-----------|-----------|
-| — | — | — | Nenhum fluxo criado ainda. Solicite o primeiro! |
+| WF-001 | Webhook Simples | basicos | Recebe dados via webhook e retorna resposta |
+| WF-032 | Dashboard Qualidade IAM | notificacoes | Serve o dashboard HTML de Qualidade IAM via webhook, com CSS/JS embutidos na resposta (sem depender de arquivos estáticos externos) |
 
 ---
 *Gerado e mantido com Claude Code*

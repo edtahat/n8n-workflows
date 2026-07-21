@@ -1,7 +1,7 @@
 {
   "catalogo": "N8N Workflows - Repositório Local",
   "versao": "1.0.0",
-  "atualizado": "2026-03-18",
+  "atualizado": "2026-07-21",
   "fontes_confiaveis": [
     "https://github.com/n8n-io/n8n-workflows",
     "https://github.com/n8n-io/n8n",
@@ -84,6 +84,13 @@
         "arquivo": "notificacoes/relatorio-diario-slack.json",
         "descricao": "Envia relatório diário automático no Slack",
         "tags": ["slack", "relatorio", "cron", "diario"]
+      },
+      {
+        "id": "WF-032",
+        "nome": "Dashboard Qualidade IAM",
+        "arquivo": "notificacoes/dashboard-qualidade-iam.json",
+        "descricao": "Serve via webhook o dashboard HTML de Qualidade IAM (KPIs, gráficos e insights), com CSS/JS embutidos na resposta",
+        "tags": ["webhook", "dashboard", "relatorio", "qualidade"]
       }
     ]
   }
