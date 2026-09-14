@@ -32,7 +32,7 @@ O arquivo JSON será gerado e salvo automaticamente neste repositório.
 
 | ID | Nome | Categoria | Descrição |
 |----|------|-----------|-----------|
-| — | — | — | Nenhum fluxo criado ainda. Solicite o primeiro! |
+| WF-013 | [Digital Maturity Assessment - Setup](fluxos/integracoes/digital-maturity-assessment.json) | integracoes | Formulário HTML de página única servido pelo n8n, com busca de pessoas no Microsoft Entra ID preenchendo os campos automaticamente ([documentação](fluxos/integracoes/digital-maturity-assessment/README.md)) |
 
 ---
 *Gerado e mantido com Claude Code*
