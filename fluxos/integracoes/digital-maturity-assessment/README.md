@@ -33,11 +33,17 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 - **Prepare Search Term** — lê o termo em `query.q`, `query.name`, `body.name` ou `body.q`
   (funciona igual em GET e POST), normaliza (trim, escapa `'`, limita a 60 caracteres) e evita
   filtro vazio, que traria usuários aleatórios.
-- **Search Entra Users** — `startswith` em `displayName`, `givenName`, `surname` e `mail`
-  (antes só `displayName`), limite de 15. Configurado com `alwaysOutputData` e
-  `onError: continueRegularOutput`, para que o webhook sempre responda e o formulário
-  nunca fique travado esperando.
-- **Return People Results** — devolve os itens como JSON com cabeçalhos CORS.
+- **Search Entra Users** — `startswith(displayName, termo)`, limite de 15. **Não** combine
+  várias propriedades com `or` (`displayName` + `givenName` + `mail` ...): o Microsoft Graph
+  recusa boa parte dessas combinações sem os parâmetros de *advanced query*
+  (`ConsistencyLevel: eventual` + `$count=true`), o nó falha e a busca volta vazia.
+  Como no diretório o `displayName` começa pelo sobrenome ("Tahata Eduardo"), buscar pelo
+  sobrenome funciona; buscar só pelo primeiro nome não.
+  Configurado com `alwaysOutputData` e `onError: continueRegularOutput`, para o webhook
+  sempre responder e o formulário nunca ficar travado esperando.
+- **Format People Results** — normaliza os usuários e **expõe o erro da API** em vez de
+  devolver lista vazia. Resposta: `{ ok, term, count, people: [...], error }`.
+- **Return People Results** — devolve esse JSON com cabeçalhos CORS.
 
 ## Formulário (interface.html)
 
@@ -89,9 +95,15 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 O formulário só chama o webhook de pessoas; quase toda falha está na URL ou no estado do
 workflow. Teste o endpoint fora do navegador primeiro:
 
-```bash
-curl -i "https://<sua-instancia>/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f?q=tahata"
+Como o endpoint agora é GET, dá para abrir direto numa aba do navegador:
+
 ```
+https://<sua-instancia>/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f?q=tahata
+```
+
+A resposta diz exatamente o que está acontecendo: `count` maior que zero significa que a
+busca funciona; `error` preenchido traz a mensagem do Microsoft Graph; 404 significa
+problema de URL/instância/workflow inativo.
 
 | Sintoma | Causa | Correção |
 |---------|-------|----------|
@@ -99,5 +111,6 @@ curl -i "https://<sua-instancia>/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f?q=
 | 404 mesmo com o workflow ativo | A URL no HTML aponta para **outra instância** (ex.: página servida por `i1-d`, busca chamando `i1-s`) | Deixe `PEOPLE_WEBHOOK_OVERRIDE` vazio: a URL passa a ser derivada da própria página. Só preencha se o workflow de busca estiver mesmo em outra instância |
 | Erro de CORS no console | Instância diferente + resposta de erro sem cabeçalho `Access-Control-Allow-Origin` | Mesma instância (acima) ou mantenha `allowedOrigins: "*"` no nó do webhook |
 | Requisição fica pendurada / sem resposta | O nó do Entra não devolveu itens, então o `Respond to Webhook` nunca executa | `alwaysOutputData: true` no `Search Entra Users` (já configurado) |
-| Nome encontrado no Entra mas não na busca | `startswith(displayName, ...)` só casa com o **começo** do nome completo | O filtro atual também busca em `givenName`, `surname` e `mail` |
+| Sempre "No user found", mesmo com nome que existe | Filtro com vários `or` (`displayName or givenName or mail`): o Graph recusa e o nó falha | Use só `startswith(displayName, ...)`, como está agora. A mensagem de erro do Graph agora aparece no próprio campo |
+| Nome encontrado no Entra mas não na busca | `startswith(displayName, ...)` casa com o **começo** do nome completo, que no diretório começa pelo sobrenome | Busque pelo sobrenome ("tahata"), não pelo primeiro nome |
 | Nome com apóstrofo (O'Brien) quebra a busca | Aspas simples não escapadas no filtro OData | O `Prepare Search Term` já duplica `'` |

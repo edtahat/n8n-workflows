@@ -9,7 +9,10 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [1872, 368],
+      "position": [
+        1872,
+        368
+      ],
       "id": "24168de2-9a74-4a87-831a-7324337bfb78",
       "name": "Interface Webhook",
       "webhookId": "7cb41a2d-d302-4bef-9d2e-fcc64f0788ed"
@@ -21,22 +24,34 @@
         "options": {
           "responseHeaders": {
             "entries": [
-              { "name": "Content-Type", "value": "text/html; charset=utf-8" },
-              { "name": "Cache-Control", "value": "no-store" }
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
             ]
           }
         }
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [2144, 368],
+      "position": [
+        2144,
+        368
+      ],
       "id": "e614cfa8-0ec6-4b3c-b487-d9fc9541cf31",
       "name": "Serve Interface"
     },
     {
       "parameters": {
         "multipleMethods": true,
-        "httpMethod": ["GET", "POST"],
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
         "path": "c7fe0be6-d5d8-4bd5-8308-e16398916e6f",
         "responseMode": "responseNode",
         "options": {
@@ -45,7 +60,10 @@
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [1872, 640],
+      "position": [
+        1872,
+        640
+      ],
       "id": "6fa61295-116b-4625-bf6a-828768bbee49",
       "name": "People Search Webhook"
     },
@@ -66,21 +84,27 @@
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [2112, 640],
+      "position": [
+        2112,
+        640
+      ],
       "id": "1a5b7c9d-3e4f-4a6b-8c1d-5e7f9a0b2c3d",
       "name": "Prepare Search Term"
     },
     {
       "parameters": {
         "limit": 15,
-        "filter": "={{ \"startswith(displayName,'\" + $json.searchTerm + \"') or startswith(givenName,'\" + $json.searchTerm + \"') or startswith(surname,'\" + $json.searchTerm + \"') or startswith(mail,'\" + $json.searchTerm + \"')\" }}",
+        "filter": "={{ \"startswith(displayName,'\" + $json.searchTerm + \"')\" }}",
         "output": "fields",
         "fields": "={{ [\"id\", \"displayName\", \"mail\", \"userPrincipalName\", \"department\", \"jobTitle\"] }}",
         "requestOptions": {}
       },
       "type": "n8n-nodes-base.microsoftEntra",
       "typeVersion": 1,
-      "position": [2352, 640],
+      "position": [
+        2352,
+        640
+      ],
       "id": "695eca6c-15c6-46a5-947a-8539d60374ee",
       "name": "Search Entra Users",
       "alwaysOutputData": true,
@@ -94,46 +118,128 @@
     },
     {
       "parameters": {
-        "respondWith": "allIncomingItems",
+        "jsCode": "// Normaliza a saida do Entra e deixa visivel qualquer erro da API,\n// em vez de devolver uma lista vazia que a interface leria como \"nenhum usuario\".\nconst term = $('Prepare Search Term').first().json.searchTerm || '';\nconst people = [];\nlet error = '';\n\nfor (const item of $input.all()) {\n  const user = item.json || {};\n\n  if (user.error) {\n    const detail = user.error;\n    error = typeof detail === 'string' ? detail : (detail.message || JSON.stringify(detail));\n    continue;\n  }\n  if (!user.displayName && !user.mail && !user.userPrincipalName) continue;\n\n  people.push({\n    id: user.id || '',\n    displayName: user.displayName || '',\n    mail: user.mail || user.userPrincipalName || '',\n    department: user.department || '',\n    jobTitle: user.jobTitle || '',\n  });\n}\n\nreturn [{ json: { ok: !error, term, count: people.length, people, error } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2592,
+        640
+      ],
+      "id": "c4d5e6f7-8a9b-4c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Format People Results"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
         "options": {
           "responseHeaders": {
             "entries": [
-              { "name": "Content-Type", "value": "application/json; charset=utf-8" },
-              { "name": "Access-Control-Allow-Origin", "value": "*" },
-              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
-              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, Accept, Authorization" },
-              { "name": "Cache-Control", "value": "no-store" }
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Accept, Authorization"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
             ]
           }
-        }
+        },
+        "responseBody": "={{ $json }}"
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [2592, 640],
+      "position": [
+        2832,
+        640
+      ],
       "id": "350e68b2-f091-4569-9e16-ca81a2a94e52",
       "name": "Return People Results"
     }
   ],
   "connections": {
     "Interface Webhook": {
-      "main": [[{ "node": "Serve Interface", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Serve Interface",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "People Search Webhook": {
-      "main": [[{ "node": "Prepare Search Term", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Prepare Search Term",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Prepare Search Term": {
-      "main": [[{ "node": "Search Entra Users", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Search Entra Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Search Entra Users": {
-      "main": [[{ "node": "Return People Results", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Format People Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format People Results": {
+      "main": [
+        [
+          {
+            "node": "Return People Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "0f8f736fb3e0a4ecf7c21159c69dcdbb6e749369983d6828280e2610856c2681"
   },
-  "tags": ["webhook", "formulario", "entra", "maturidade"]
+  "tags": [
+    "webhook",
+    "formulario",
+    "entra",
+    "maturidade"
+  ]
 }
