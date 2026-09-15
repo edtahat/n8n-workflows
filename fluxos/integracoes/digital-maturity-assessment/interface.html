@@ -148,9 +148,13 @@ th:first-child,td:first-child{text-align:left;min-width:150px}
 </main>
 <script>
 'use strict';
+/* Deixe vazio para usar a mesma instancia n8n que serviu esta pagina (recomendado).
+   Preencha com a URL completa apenas se o workflow de busca estiver em OUTRA instancia,
+   por exemplo: 'https://i1-s.n8n.bosch.com/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f' */
+var PEOPLE_WEBHOOK_OVERRIDE='';
 var WEBHOOK_BASE=location.origin+(location.pathname.indexOf('/webhook-test/')!==-1?'/webhook-test':'/webhook');
 var SUBMIT_ENDPOINT=WEBHOOK_BASE+'/5e0f338d-9b2b-48dd-9d39-8dc301798212';
-var PEOPLE_WEBHOOK=WEBHOOK_BASE+'/c7fe0be6-d5d8-4bd5-8308-e16398916e6f';
+var PEOPLE_WEBHOOK=PEOPLE_WEBHOOK_OVERRIDE||WEBHOOK_BASE+'/c7fe0be6-d5d8-4bd5-8308-e16398916e6f';
 const FRAMEWORK={dimensions:[
 {id:'execution_method',question:'How are the activities of this process currently performed?',levels:['Fully manual (spreadsheets, emails, local controls)','Partially digital, with heavy manual intervention','Some automation, but frequent rework still occurs','Mostly automated and standardized','Fully automated, with minimal human intervention']},
 {id:'manual_effort',question:'What level of manual effort is required to execute the process?',levels:['Very high - depends entirely on manual activities','High - large part manual','Medium - balance between manual and automated','Low - little manual intervention','Very low - process is practically automatic']},
@@ -182,7 +186,9 @@ function normalizePerson(item){
   return{id:person.id||'',name:name,email:person.mail||person.email||person.userPrincipalName||'',department:department,jobTitle:person.jobTitle||''};
 }
 async function searchPeople(term){
-  const response=await fetch(PEOPLE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({name:term})});
+  /* GET com ?q= : requisicao "simples" para o navegador, sem preflight OPTIONS.
+     O webhook aceita GET e POST, e le o termo em query.q, query.name ou body.name. */
+  const response=await fetch(PEOPLE_WEBHOOK+'?q='+encodeURIComponent(term),{method:'GET',headers:{'Accept':'application/json'}});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const text=await response.text();
   if(!text.trim())return[];
@@ -220,7 +226,7 @@ function attachPeopleSearch(input,options){
       }catch(error){
         if(mySequence!==sequence)return;
         console.error('People search failed:',error);
-        results=[];close();setHint('Directory search unavailable - type the details manually.',true);
+        results=[];close();setHint('Directory search unavailable ('+(error.message||'error')+') - type the details manually.',true);
       }
     },250);
   });

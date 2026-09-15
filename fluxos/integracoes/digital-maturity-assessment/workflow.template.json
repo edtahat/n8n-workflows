@@ -35,7 +35,8 @@
     },
     {
       "parameters": {
-        "httpMethod": "POST",
+        "multipleMethods": true,
+        "httpMethod": ["GET", "POST"],
         "path": "c7fe0be6-d5d8-4bd5-8308-e16398916e6f",
         "responseMode": "responseNode",
         "options": {
@@ -55,7 +56,7 @@
             {
               "id": "9f1c0a42-1f0e-4c1b-90f2-2b0a0c2d5f01",
               "name": "searchTerm",
-              "value": "={{ String(($json.body || {}).name || '').trim().replace(/'/g, \"''\").slice(0, 60) || 'zzzz-no-match-zzzz' }}",
+              "value": "={{ String(($json.query || {}).q || ($json.query || {}).name || ($json.body || {}).name || ($json.body || {}).q || '').trim().replace(/'/g, \"''\").slice(0, 60) || 'zzzz-no-match-zzzz' }}",
               "type": "string"
             }
           ]

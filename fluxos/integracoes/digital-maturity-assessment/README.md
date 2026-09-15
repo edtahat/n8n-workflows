@@ -26,8 +26,12 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 ```
 
 - **Interface Webhook** — `GET /webhook/7cb41a2d-d302-4bef-9d2e-fcc64f0788ed`, entrega a página.
-- **People Search Webhook** — `POST /webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f`, recebe `{"name":"tahata"}`.
-- **Prepare Search Term** — normaliza o termo (trim, escapa `'`, limita a 60 caracteres) e evita
+- **People Search Webhook** — `GET` **e** `POST` em `/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f`
+  (`multipleMethods: true`). O formulário usa `GET ...?q=tahata`, que é uma requisição
+  "simples" para o navegador e não dispara preflight `OPTIONS`. `allowedOrigins: "*"`
+  faz o n8n responder ao preflight e mandar cabeçalhos CORS também nos erros.
+- **Prepare Search Term** — lê o termo em `query.q`, `query.name`, `body.name` ou `body.q`
+  (funciona igual em GET e POST), normaliza (trim, escapa `'`, limita a 60 caracteres) e evita
   filtro vazio, que traria usuários aleatórios.
 - **Search Entra Users** — `startswith` em `displayName`, `givenName`, `surname` e `mail`
   (antes só `displayName`), limite de 15. Configurado com `alwaysOutputData` e
@@ -79,3 +83,21 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 3. O endpoint de envio (`5e0f338d-...`) precisa existir em outro workflow; ajuste o UUID
    em `interface.html` se for diferente.
 4. Ative o workflow para que as URLs de produção (`/webhook/...`) respondam.
+
+## Se a busca não funcionar
+
+O formulário só chama o webhook de pessoas; quase toda falha está na URL ou no estado do
+workflow. Teste o endpoint fora do navegador primeiro:
+
+```bash
+curl -i "https://<sua-instancia>/webhook/c7fe0be6-d5d8-4bd5-8308-e16398916e6f?q=tahata"
+```
+
+| Sintoma | Causa | Correção |
+|---------|-------|----------|
+| 404 `webhook not registered` | URL de produção (`/webhook/...`) com o workflow **inativo**, ou método diferente do configurado no nó | Ative o workflow, ou use `/webhook-test/...` com o "Listen for test event" ligado |
+| 404 mesmo com o workflow ativo | A URL no HTML aponta para **outra instância** (ex.: página servida por `i1-d`, busca chamando `i1-s`) | Deixe `PEOPLE_WEBHOOK_OVERRIDE` vazio: a URL passa a ser derivada da própria página. Só preencha se o workflow de busca estiver mesmo em outra instância |
+| Erro de CORS no console | Instância diferente + resposta de erro sem cabeçalho `Access-Control-Allow-Origin` | Mesma instância (acima) ou mantenha `allowedOrigins: "*"` no nó do webhook |
+| Requisição fica pendurada / sem resposta | O nó do Entra não devolveu itens, então o `Respond to Webhook` nunca executa | `alwaysOutputData: true` no `Search Entra Users` (já configurado) |
+| Nome encontrado no Entra mas não na busca | `startswith(displayName, ...)` só casa com o **começo** do nome completo | O filtro atual também busca em `givenName`, `surname` e `mail` |
+| Nome com apóstrofo (O'Brien) quebra a busca | Aspas simples não escapadas no filtro OData | O `Prepare Search Term` já duplica `'` |
