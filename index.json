@@ -1,7 +1,7 @@
 {
   "catalogo": "N8N Workflows - Repositório Local",
   "versao": "1.0.0",
-  "atualizado": "2026-09-14",
+  "atualizado": "2026-10-26",
   "fontes_confiaveis": [
     "https://github.com/n8n-io/n8n-workflows",
     "https://github.com/n8n-io/n8n",
@@ -83,11 +83,12 @@
         "id": "WF-013",
         "nome": "Digital Maturity Assessment - Setup",
         "arquivo": "fluxos/integracoes/digital-maturity-assessment.json",
-        "descricao": "Formulario HTML de pagina unica servido pelo n8n, com busca de pessoas no Microsoft Entra ID preenchendo os campos automaticamente",
+        "descricao": "Formulario HTML de pagina unica servido pelo n8n, com busca de pessoas no Microsoft Entra ID e consulta de CNPJ preenchendo os campos automaticamente",
         "tags": [
           "webhook",
           "formulario",
           "entra",
+          "cnpj",
           "maturidade",
           "html"
         ]

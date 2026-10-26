@@ -11,18 +11,24 @@ pessoas no Microsoft Entra ID para preencher o formulário automaticamente.
 | `interface.html` | Fonte do formulário (edite aqui) |
 | `workflow.template.json` | Estrutura do workflow com o placeholder `__INTERFACE_HTML__` |
 | `build.py` | Injeta `interface.html` no template e gera o JSON importável |
+| `test/interface.test.mjs` | Testes do formulário em navegador real, com os webhooks simulados |
 
 Depois de editar `interface.html` ou `workflow.template.json`:
 
 ```bash
 python3 build.py
+
+# opcional, valida o formulário num navegador de verdade
+npm install playwright && node test/interface.test.mjs
 ```
 
 ## Nós do workflow
 
 ```
-Interface Webhook (GET)      -> Serve Interface (HTML da página)
-People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Return People Results
+Interface Webhook (GET)          -> Serve Interface (HTML da página)
+People Search Webhook (GET/POST) -> Prepare Search Term -> Search Entra Users -> Format People Results -> Return People Results
+CNPJ Webhook (GET/POST)          -> Prepare CNPJ -> CNPJ válido? -> Fetch CNPJ -> Format CNPJ Result -> Return CNPJ Result
+                                                                 \-> (inválido) ----------------------> Return CNPJ Result
 ```
 
 - **Interface Webhook** — `GET /webhook/7cb41a2d-d302-4bef-9d2e-fcc64f0788ed`, entrega a página.
@@ -44,6 +50,27 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 - **Format People Results** — normaliza os usuários e **expõe o erro da API** em vez de
   devolver lista vazia. Resposta: `{ ok, term, count, people: [...], error }`.
 - **Return People Results** — devolve esse JSON com cabeçalhos CORS.
+
+### Consulta de CNPJ
+
+- **CNPJ Webhook** — `GET`/`POST` em `/webhook/3f0a5c21-9b7e-4d58-a0c6-71e2d4f8b913`,
+  chamado pelo formulário como `?cnpj=11222333000181`.
+- **Prepare CNPJ** — limpa a pontuação e valida os dígitos verificadores. Aceita o CNPJ
+  numérico e o **alfanumérico** (12 caracteres + 2 dígitos, com o valor de cada caractere
+  igual ao código ASCII menos 48).
+- **CNPJ válido?** — CNPJ inválido responde na hora, sem gastar chamada na API externa.
+- **Fetch CNPJ** — `GET https://brasilapi.com.br/api/cnpj/v1/{cnpj}`, sem autenticação,
+  com `neverError` para o corpo do 404 chegar ao fluxo. **Requer saída para a internet
+  a partir da instância n8n** — se estiver bloqueada, troque a URL pela API interna
+  (o nó seguinte já entende o formato BrasilAPI e o da ReceitaWS).
+- **Format CNPJ Result** — normaliza e expõe o erro: `{ ok, cnpj, cnpjFormatted, error, company }`.
+  `company` traz `razaoSocial`, `nomeFantasia`, `situacao`, `dataAbertura`,
+  `atividadePrincipal`, `porte`, endereço (`logradouro`, `numero`, `bairro`, `municipio`,
+  `uf`, `cep`), `telefone` e `email`.
+
+No formulário, o CNPJ é **opcional**: digitou, ele é validado no navegador (sem chamada
+inútil para DV errado) e consultado; razão social, nome fantasia e município/UF são
+preenchidos sozinhos. Um CNPJ preenchido e inválido bloqueia o envio; em branco, não.
 
 ## Formulário (interface.html)
 
@@ -88,7 +115,8 @@ People Search Webhook (POST) -> Prepare Search Term -> Search Entra Users -> Ret
 2. Troque `REPLACE_WITH_LOGO_URL` em `interface.html` pela URL do logotipo e rode `build.py`.
 3. O endpoint de envio (`5e0f338d-...`) precisa existir em outro workflow; ajuste o UUID
    em `interface.html` se for diferente.
-4. Ative o workflow para que as URLs de produção (`/webhook/...`) respondam.
+4. Confirme que a instância alcança `brasilapi.com.br` (nó `Fetch CNPJ`).
+5. Ative o workflow para que as URLs de produção (`/webhook/...`) respondam.
 
 ## Se a busca não funcionar
 
@@ -114,3 +142,5 @@ problema de URL/instância/workflow inativo.
 | Sempre "No user found", mesmo com nome que existe | Filtro com vários `or` (`displayName or givenName or mail`): o Graph recusa e o nó falha | Use só `startswith(displayName, ...)`, como está agora. A mensagem de erro do Graph agora aparece no próprio campo |
 | Nome encontrado no Entra mas não na busca | `startswith(displayName, ...)` casa com o **começo** do nome completo, que no diretório começa pelo sobrenome | Busque pelo sobrenome ("tahata"), não pelo primeiro nome |
 | Nome com apóstrofo (O'Brien) quebra a busca | Aspas simples não escapadas no filtro OData | O `Prepare Search Term` já duplica `'` |
+| CNPJ sempre falha com erro de rede/DNS | A instância n8n não tem saída para `brasilapi.com.br` | Troque a URL do nó `Fetch CNPJ` por uma API interna; o `Format CNPJ Result` já normaliza os dois formatos |
+| CNPJ novo (com letras) recusado | Validação que só aceita dígitos | O fluxo e o formulário já aceitam o CNPJ alfanumérico |

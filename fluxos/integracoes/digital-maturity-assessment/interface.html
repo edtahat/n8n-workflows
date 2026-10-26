@@ -110,14 +110,27 @@ th:first-child,td:first-child{text-align:left;min-width:150px}
 </section>
 
 <section class="panel">
-<div class="panel-head"><span class="panel-num">02</span><h2 class="panel-title">Who will receive the form</h2></div>
+<div class="panel-head"><span class="panel-num">02</span><h2 class="panel-title">Company</h2></div>
+<p class="panel-desc">Type the CNPJ of the site being assessed. The company data is looked up automatically; leave it blank if it does not apply.</p>
+<div class="field-grid field-row">
+<div><label for="cnpj">CNPJ</label><input type="text" id="cnpj" name="cnpj" placeholder="00.000.000/0000-00" autocomplete="off" maxlength="18"><div class="ac-hint" id="cnpjHint"></div></div>
+<div><label for="companyName">Raz&atilde;o social</label><input type="text" id="companyName" placeholder="Filled from the CNPJ lookup" readonly></div>
+</div>
+<div class="field-grid field-row">
+<div><label for="companyTrade">Nome fantasia</label><input type="text" id="companyTrade" placeholder="-" readonly></div>
+<div><label for="companyCity">Munic&iacute;pio / UF</label><input type="text" id="companyCity" placeholder="-" readonly></div>
+</div>
+</section>
+
+<section class="panel">
+<div class="panel-head"><span class="panel-num">03</span><h2 class="panel-title">Who will receive the form</h2></div>
 <p class="panel-desc">Add everyone who should complete the assessment. Names are searched in the directory as well.</p>
 <div id="respondentsList"></div>
 <button type="button" class="btn-add" id="addRespondentBtn">+ Add respondent</button>
 </section>
 
 <section class="panel">
-<div class="panel-head"><span class="panel-num">03</span><h2 class="panel-title">Core activities to evaluate</h2></div>
+<div class="panel-head"><span class="panel-num">04</span><h2 class="panel-title">Core activities to evaluate</h2></div>
 <p class="panel-desc">Each activity will be scored against all maturity dimensions.</p>
 <div class="info-box"><strong>Tip:</strong> keep names short and recognizable. Use the description for systems, scope or acronyms.</div>
 <div id="activitiesList"></div>
@@ -125,7 +138,7 @@ th:first-child,td:first-child{text-align:left;min-width:150px}
 </section>
 
 <section class="panel">
-<div class="panel-head"><span class="panel-num">04</span><h2 class="panel-title">Framework &amp; send</h2></div>
+<div class="panel-head"><span class="panel-num">05</span><h2 class="panel-title">Framework &amp; send</h2></div>
 <p class="panel-desc">Review the setup and submit it to n8n.</p>
 <div class="review-summary">
 <div class="review-card"><div class="num" id="reviewDept">-</div><div class="lbl">Department</div></div>
@@ -155,6 +168,8 @@ var PEOPLE_WEBHOOK_OVERRIDE='';
 var WEBHOOK_BASE=location.origin+(location.pathname.indexOf('/webhook-test/')!==-1?'/webhook-test':'/webhook');
 var SUBMIT_ENDPOINT=WEBHOOK_BASE+'/5e0f338d-9b2b-48dd-9d39-8dc301798212';
 var PEOPLE_WEBHOOK=PEOPLE_WEBHOOK_OVERRIDE||WEBHOOK_BASE+'/c7fe0be6-d5d8-4bd5-8308-e16398916e6f';
+var CNPJ_WEBHOOK_OVERRIDE='';
+var CNPJ_WEBHOOK=CNPJ_WEBHOOK_OVERRIDE||WEBHOOK_BASE+'/3f0a5c21-9b7e-4d58-a0c6-71e2d4f8b913';
 const FRAMEWORK={dimensions:[
 {id:'execution_method',question:'How are the activities of this process currently performed?',levels:['Fully manual (spreadsheets, emails, local controls)','Partially digital, with heavy manual intervention','Some automation, but frequent rework still occurs','Mostly automated and standardized','Fully automated, with minimal human intervention']},
 {id:'manual_effort',question:'What level of manual effort is required to execute the process?',levels:['Very high - depends entirely on manual activities','High - large part manual','Medium - balance between manual and automated','Low - little manual intervention','Very low - process is practically automatic']},
@@ -171,7 +186,7 @@ const FRAMEWORK={dimensions:[
 {id:'team_autonomy',question:'Is the team autonomous in developing digital solutions?',options:['Fully dependent','Highly dependent','Partially autonomous','Mostly autonomous','Fully autonomous']},
 {id:'team_reaction',question:'How does the team respond to digital initiatives?',options:['Resistant','Reactive','Neutral','Proactive','Consolidated digital culture']}
 ],openQuestions:['Which process do you consider most critical for digital improvement?','Where are the biggest inefficiencies / waste today?']};
-const state={respondents:[{name:'',email:'',role:''}],activities:[{name:'',description:''}]};
+const state={respondents:[{name:'',email:'',role:''}],activities:[{name:'',description:''}],company:null};
 const $=id=>document.getElementById(id);
 const escapeHtml=value=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const isValidEmail=value=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -270,6 +285,69 @@ attachPeopleSearch($('reqName'),{
   }
 });
 
+/* ---------- CNPJ lookup ---------- */
+const onlyCnpjChars=value=>String(value).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,14);
+function formatCnpj(value){
+  const v=onlyCnpjChars(value);
+  if(v.length<=2)return v;
+  if(v.length<=5)return v.slice(0,2)+'.'+v.slice(2);
+  if(v.length<=8)return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5);
+  if(v.length<=12)return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8);
+  return v.slice(0,2)+'.'+v.slice(2,5)+'.'+v.slice(5,8)+'/'+v.slice(8,12)+'-'+v.slice(12);
+}
+/* Mesma validacao do no "Prepare CNPJ": aceita o CNPJ numerico e o alfanumerico
+   (12 caracteres + 2 digitos verificadores), em que o valor do caractere e o ASCII menos 48. */
+function isValidCnpj(value){
+  const v=onlyCnpjChars(value);
+  if(v.length!==14)return false;
+  if(/^(.)\1{13}$/.test(v))return false;
+  if(!/^[A-Z0-9]{12}[0-9]{2}$/.test(v))return false;
+  const valueOf=char=>char.charCodeAt(0)-48;
+  const checkDigit=base=>{
+    let weight=base.length-7,sum=0;
+    for(let i=0;i<base.length;i++){sum+=valueOf(base[i])*weight--;if(weight<2)weight=9}
+    const rest=sum%11;return rest<2?0:11-rest;
+  };
+  return checkDigit(v.slice(0,12))===Number(v[12])&&checkDigit(v.slice(0,13))===Number(v[13]);
+}
+function setCnpjHint(msg,isError){$('cnpjHint').textContent=msg||'';$('cnpjHint').className='ac-hint'+(isError?' err':'')}
+function clearCompany(){state.company=null;$('companyName').value='';$('companyTrade').value='';$('companyCity').value=''}
+let cnpjTimer=null,cnpjSequence=0;
+async function lookupCnpj(digits){
+  const mySequence=++cnpjSequence;
+  setCnpjHint('Looking up the CNPJ...');
+  try{
+    const response=await fetch(CNPJ_WEBHOOK+'?cnpj='+encodeURIComponent(digits),{method:'GET',headers:{'Accept':'application/json'}});
+    const text=await response.text();
+    if(mySequence!==cnpjSequence)return;
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    if(!text.trim())throw new Error('Empty response from the CNPJ workflow.');
+    let raw;try{raw=JSON.parse(text)}catch(e){throw new Error('Response was not JSON: '+text.slice(0,120))}
+    if(raw.error)throw new Error(String(raw.error).slice(0,200));
+    const company=raw.company||raw;
+    if(!company||!(company.razaoSocial||company.nomeFantasia))throw new Error('CNPJ not found.');
+    state.company=Object.assign({cnpj:digits,cnpjFormatted:formatCnpj(digits)},company);
+    $('companyName').value=company.razaoSocial||'';
+    $('companyTrade').value=company.nomeFantasia||'';
+    $('companyCity').value=[company.municipio,company.uf].filter(Boolean).join(' / ');
+    setCnpjHint(company.situacao?('Situação cadastral: '+company.situacao):'');
+  }catch(error){
+    if(mySequence!==cnpjSequence)return;
+    console.error('CNPJ lookup failed:',error);
+    clearCompany();
+    setCnpjHint('Lookup failed: '+(error.message||'unknown error')+' - fill the company in manually if needed.',true);
+  }
+}
+$('cnpj').addEventListener('input',function(){
+  const digits=onlyCnpjChars(this.value);
+  this.value=formatCnpj(digits);
+  clearTimeout(cnpjTimer);cnpjSequence++;clearCompany();
+  if(!digits){setCnpjHint('');return}
+  if(digits.length<14){setCnpjHint('');return}
+  if(!isValidCnpj(digits)){setCnpjHint('Invalid CNPJ - check the digits.',true);return}
+  cnpjTimer=setTimeout(()=>lookupCnpj(digits),250);
+});
+
 /* ---------- Respondents & activities ---------- */
 function renderRespondents(){
   $('respondentsList').innerHTML=state.respondents.map((r,i)=>'<div class="row-item"><div class="ac-wrap"><input type="text" aria-label="Respondent name" placeholder="Type to search..." autocomplete="off" value="'+escapeHtml(r.name)+'" data-r-index="'+i+'" data-r-field="name"><div class="ac-box" role="listbox" data-r-box="'+i+'"></div></div><input type="email" aria-label="Respondent email" placeholder="Email address" value="'+escapeHtml(r.email)+'" data-r-index="'+i+'" data-r-field="email"><input type="text" aria-label="Respondent role" placeholder="Role (optional)" value="'+escapeHtml(r.role)+'" data-r-index="'+i+'" data-r-field="role"><button type="button" class="btn-icon" data-remove-r="'+i+'" aria-label="Remove respondent">X</button></div>').join('');
@@ -320,6 +398,8 @@ function validateForm(){
   if(!$('reqName').value.trim())return{msg:'Enter the requester name.',focus:'reqName'};
   if(!isValidEmail($('reqEmail').value.trim()))return{msg:'Enter a valid requester email.',focus:'reqEmail'};
   if(!$('targetDate').value)return{msg:'Select the validity date.',focus:'targetDate'};
+  const cnpjDigits=onlyCnpjChars($('cnpj').value);
+  if(cnpjDigits&&!isValidCnpj(cnpjDigits))return{msg:'The CNPJ is invalid - fix it or leave the field blank.',focus:'cnpj'};
   if(!state.respondents.some(r=>r.name.trim()&&isValidEmail(r.email.trim())))return{msg:'Add at least one respondent with a valid name and email.',focus:'addRespondentBtn'};
   if(!state.activities.some(a=>a.name.trim()))return{msg:'Add at least one core activity.',focus:'addActivityBtn'};
   return null;
@@ -338,6 +418,7 @@ function buildPayload(){
       requestedByJobTitle:$('reqJobTitle').value,
       requestedById:$('reqUserId').value
     },
+    company:state.company||(onlyCnpjChars($('cnpj').value)?{cnpj:onlyCnpjChars($('cnpj').value),cnpjFormatted:formatCnpj($('cnpj').value)}:null),
     respondents:state.respondents.filter(r=>r.name.trim()&&isValidEmail(r.email.trim())).map(r=>({name:r.name.trim(),email:r.email.trim(),role:r.role.trim()})),
     activities:state.activities.filter(a=>a.name.trim()).map(a=>({name:a.name.trim(),description:a.description.trim()})),
     maturityFramework:FRAMEWORK

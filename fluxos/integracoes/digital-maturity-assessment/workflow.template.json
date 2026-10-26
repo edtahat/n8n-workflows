@@ -168,6 +168,153 @@
       ],
       "id": "350e68b2-f091-4569-9e16-ca81a2a94e52",
       "name": "Return People Results"
+    },
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
+        "path": "3f0a5c21-9b7e-4d58-a0c6-71e2d4f8b913",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1872,
+        912
+      ],
+      "id": "8c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+      "name": "CNPJ Webhook",
+      "webhookId": "3f0a5c21-9b7e-4d58-a0c6-71e2d4f8b913"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sanitiza e valida o CNPJ antes de gastar uma chamada na API.\n// Aceita o formato numerico e o CNPJ alfanumerico (12 caracteres + 2 digitos verificadores),\n// em que o valor de cada caractere e o codigo ASCII menos 48.\nconst input = $input.first().json || {};\nconst query = input.query || {};\nconst body = input.body || {};\nconst cnpj = String(query.cnpj || query.q || body.cnpj || body.q || '')\n  .toUpperCase()\n  .replace(/[^A-Z0-9]/g, '');\n\nfunction isValid(value) {\n  if (value.length !== 14) return false;\n  if (/^(.)\\1{13}$/.test(value)) return false;\n  if (!/^[A-Z0-9]{12}[0-9]{2}$/.test(value)) return false;\n\n  const valueOf = (char) => char.charCodeAt(0) - 48;\n  const checkDigit = (base) => {\n    let weight = base.length - 7;\n    let sum = 0;\n    for (let i = 0; i < base.length; i++) {\n      sum += valueOf(base[i]) * weight--;\n      if (weight < 2) weight = 9;\n    }\n    const rest = sum % 11;\n    return rest < 2 ? 0 : 11 - rest;\n  };\n\n  return checkDigit(value.slice(0, 12)) === Number(value[12])\n    && checkDigit(value.slice(0, 13)) === Number(value[13]);\n}\n\nconst formatted = cnpj.length === 14\n  ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`\n  : cnpj;\nconst valid = isValid(cnpj);\n\nreturn [{\n  json: {\n    cnpj,\n    cnpjFormatted: formatted,\n    valid,\n    ok: valid,\n    error: valid ? '' : (cnpj ? 'CNPJ invalido: ' + formatted : 'Informe o CNPJ.'),\n    company: null,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        912
+      ],
+      "id": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "Prepare CNPJ"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2352,
+        912
+      ],
+      "id": "5d6e7f8a-9b0c-4d1e-8f2a-3b4c5d6e7f8a",
+      "name": "CNPJ valido?"
+    },
+    {
+      "parameters": {
+        "url": "=https://brasilapi.com.br/api/cnpj/v1/{{ $json.cnpj }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2592,
+        816
+      ],
+      "id": "9e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+      "name": "Fetch CNPJ",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza a resposta da API publica e deixa o erro visivel para a interface.\n// Entende o formato da BrasilAPI e o da ReceitaWS, entao trocar de provedor nao quebra o form.\nconst prepared = $('Prepare CNPJ').first().json;\nconst raw = $input.first().json || {};\nlet error = '';\n\nif (raw.error) {\n  error = typeof raw.error === 'string' ? raw.error : (raw.error.message || JSON.stringify(raw.error));\n} else if (!raw.cnpj && !raw.razao_social && !raw.nome) {\n  error = raw.message || raw.detalhes || raw.type || 'CNPJ nao encontrado.';\n}\n\nconst first = (...values) => values.find((v) => v !== undefined && v !== null && v !== '') || '';\nconst atividade = Array.isArray(raw.atividade_principal) ? (raw.atividade_principal[0] || {}) : {};\n\nconst company = error ? null : {\n  cnpj: prepared.cnpj,\n  cnpjFormatted: prepared.cnpjFormatted,\n  razaoSocial: first(raw.razao_social, raw.nome),\n  nomeFantasia: first(raw.nome_fantasia, raw.fantasia),\n  situacao: first(raw.descricao_situacao_cadastral, raw.situacao),\n  dataAbertura: first(raw.data_inicio_atividade, raw.abertura),\n  atividadePrincipal: first(raw.cnae_fiscal_descricao, atividade.text),\n  porte: first(raw.descricao_porte, raw.porte),\n  logradouro: first(raw.logradouro),\n  numero: first(raw.numero),\n  bairro: first(raw.bairro),\n  municipio: first(raw.municipio),\n  uf: first(raw.uf),\n  cep: first(raw.cep),\n  telefone: first(raw.ddd_telefone_1, raw.telefone),\n  email: first(raw.email),\n};\n\nreturn [{\n  json: {\n    ok: !error,\n    cnpj: prepared.cnpj,\n    cnpjFormatted: prepared.cnpjFormatted,\n    error,\n    company,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        816
+      ],
+      "id": "3a4b5c6d-7e8f-4a9b-8c0d-1e2f3a4b5c6d",
+      "name": "Format CNPJ Result"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "GET, POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Accept, Authorization"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3072,
+        912
+      ],
+      "id": "6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b9c",
+      "name": "Return CNPJ Result"
     }
   ],
   "connections": {
@@ -220,6 +367,68 @@
         [
           {
             "node": "Return People Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CNPJ Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare CNPJ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare CNPJ": {
+      "main": [
+        [
+          {
+            "node": "CNPJ valido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CNPJ valido?": {
+      "main": [
+        [
+          {
+            "node": "Fetch CNPJ",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return CNPJ Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CNPJ": {
+      "main": [
+        [
+          {
+            "node": "Format CNPJ Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format CNPJ Result": {
+      "main": [
+        [
+          {
+            "node": "Return CNPJ Result",
             "type": "main",
             "index": 0
           }
