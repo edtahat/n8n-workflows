@@ -1,7 +1,7 @@
 {
   "catalogo": "N8N Workflows - Repositório Local",
   "versao": "1.0.0",
-  "atualizado": "2026-03-18",
+  "atualizado": "2026-10-26",
   "fontes_confiaveis": [
     "https://github.com/n8n-io/n8n-workflows",
     "https://github.com/n8n-io/n8n",
@@ -52,6 +52,13 @@
         "arquivo": "integracoes/email-to-telegram.json",
         "descricao": "Encaminha emails importantes para Telegram",
         "tags": ["email", "telegram", "notificacao"]
+      },
+      {
+        "id": "WF-013",
+        "nome": "API Consulta CNPJ (Receita Federal)",
+        "arquivo": "fluxos/integracoes/consulta-cnpj-receita.json",
+        "descricao": "Valida o CNPJ e retorna se está registrado e com situação cadastral ATIVA",
+        "tags": ["cnpj", "receita-federal", "webhook", "api", "validacao"]
       }
     ],
     "dados": [

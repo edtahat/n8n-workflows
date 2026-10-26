@@ -32,7 +32,32 @@ O arquivo JSON será gerado e salvo automaticamente neste repositório.
 
 | ID | Nome | Categoria | Descrição |
 |----|------|-----------|-----------|
-| — | — | — | Nenhum fluxo criado ainda. Solicite o primeiro! |
+| WF-013 | [API Consulta CNPJ (Receita Federal)](fluxos/integracoes/consulta-cnpj-receita.json) | integracoes | `GET /webhook/cnpj?cnpj=...` valida os dígitos verificadores (inclusive CNPJ alfanumérico) e informa se o CNPJ está registrado e com situação cadastral ATIVA |
+
+### WF-013 — API Consulta CNPJ
+
+```
+GET https://SEU-N8N/webhook/cnpj?cnpj=00.000.000/0001-91
+```
+
+Resposta (`200`):
+
+```json
+{
+  "cnpj": "00.000.000/0001-91",
+  "formato_valido": true,
+  "registrado": true,
+  "valido": true,
+  "situacao_cadastral": "ATIVA",
+  "razao_social": "BANCO DO BRASIL SA",
+  "...": "data da situação, motivo, nome fantasia, CNAE, município/UF"
+}
+```
+
+- `valido` = registrado **e** situação cadastral `ATIVA` (BAIXADA, INAPTA, SUSPENSA e NULA retornam `false`).
+- CNPJ com dígito verificador errado → `400` sem consultar a fonte; CNPJ inexistente → `200` com `registrado: false`.
+- Fonte indisponível ou limite de consultas → `502`/`503` com `registrado: null` (resultado indeterminado, não significa inválido).
+- A fonte é a [BrasilAPI](https://brasilapi.com.br/docs#tag/CNPJ), que publica a base aberta de CNPJ da Receita Federal (atualização mensal). A página `cnpjreva` da Receita exige captcha, por isso não é consultada diretamente.
 
 ---
 *Gerado e mantido com Claude Code*
